@@ -61,7 +61,7 @@ def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
             "text": caption,
             "parse_mode": "HTML",
             "reply_markup": reply_markup,
-            "disable_web_page_preview": False,
+            "disable_web_page_preview": True,
         },
         timeout=20,
     ).json()
@@ -118,7 +118,7 @@ def main():
         f"💰 <b>Offer Price:</b> ৳{disc_price} <s>৳{orig_price}</s>\n"
         f"📉 <b>Discount:</b> {disc_pct} OFF\n"
         f"⭐ <b>Rating:</b> {rating}/5\n\n"
-        f"👉 <a href=\"{safe_link}\"><b>এখানে ক্লিক করে অর্ডার করুন</b></a>"
+        f"👉 <a href=\"{safe_link}\"><b>এখানে ক্লিক করে দারাজ থেকে অর্ডার করুন</b></a>"
     )
 
     send_telegram_post(bot_token, chat_id, caption, image_url, aff_link)
