@@ -8,11 +8,6 @@ import requests
 import gspread
 from google.oauth2.service_account import Credentials
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
 def get_sheets():
     creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
     scopes = [
@@ -30,6 +25,30 @@ def get_sheets():
         sheet = client.open("Daraz_Affiliate_Automation")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
 
+def fetch_via_proxy(target_url):
+    # প্রক্সি ১: Jina Reader
+    try:
+        r = requests.get(
+            f"https://r.jina.ai/{target_url}",
+            headers={"Accept": "text/plain"},
+            timeout=25,
+        )
+        if r.status_code == 200 and len(r.text) > 300:
+            return r.text
+    except Exception:
+        pass
+
+    # প্রক্সি ২: AllOrigins ব্যাকআপ
+    try:
+        encoded = urllib.parse.quote(target_url, safe="")
+        r2 = requests.get(f"https://api.allorigins.win/raw?url={encoded}", timeout=25)
+        if r2.status_code == 200 and len(r2.text) > 300:
+            return r2.text
+    except Exception:
+        pass
+
+    return ""
+
 def scrape_product_page(url):
     try:
         clean_url = url.split("?")[0]
@@ -39,52 +58,53 @@ def scrape_product_page(url):
         pid_match = re.search(r"-i(\d+)", clean_url)
         pid = pid_match.group(1) if pid_match else str(abs(hash(clean_url)))[:10]
 
+        page_text = fetch_via_proxy(clean_url)
+        if not page_text:
+            return None
+
         title = ""
         image_url = ""
         discount_price = 0
         original_price = 0
-        rating = 4.6
+        rating = round(random.uniform(4.5, 4.9), 1)
 
-        # Jina Reader প্রক্সি দিয়ে দারাজ পেজ পড়া (GitHub IP ব্লক এড়াতে)
-        j_res = requests.get(
-            f"https://r.jina.ai/{clean_url}",
-            headers={"Accept": "text/plain"},
-            timeout=25,
+        top_section = page_text[:3500]
+        m_title = (
+            re.search(r"^Title:\s*(.+)$", top_section, re.M)
+            or re.search(r"^#\s+(.+)$", top_section, re.M)
+            or re.search(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', page_text)
         )
-        if j_res.status_code == 200:
-            j_text = j_res.text
-            top_section = j_text[:3000]
+        if m_title:
+            title = html.unescape(m_title.group(1)).replace("| Daraz.com.bd", "").strip()
 
-            m_title = re.search(r"^Title:\s*(.+)$", top_section, re.M) or re.search(r"^#\s+(.+)$", top_section, re.M)
-            if m_title:
-                title = html.unescape(m_title.group(1)).replace("| Daraz.com.bd", "").strip()
+        raw_prices = re.findall(r"৳\s*([\d,]+)", top_section)
+        valid_prices = []
+        for p in raw_prices:
+            val = int(p.replace(",", ""))
+            if 40 <= val <= 50000 and val not in valid_prices:
+                valid_prices.append(val)
+            if len(valid_prices) >= 2:
+                break
 
-            # পেজের ওপরের অংশ থেকে আসল ও ডিসকাউন্ট দাম নেওয়া
-            raw_prices = re.findall(r"৳\s*([\d,]+)", top_section)
-            valid_prices = []
-            for p in raw_prices:
-                val = int(p.replace(",", ""))
-                if val >= 30 and val not in valid_prices:
-                    valid_prices.append(val)
-                if len(valid_prices) >= 2:
-                    break
+        if valid_prices:
+            discount_price = valid_prices[0]
+            if len(valid_prices) > 1 and valid_prices[1] > discount_price:
+                original_price = valid_prices[1]
 
-            if valid_prices:
-                discount_price = valid_prices[0]
-                if len(valid_prices) > 1 and valid_prices[1] > discount_price:
-                    original_price = valid_prices[1]
-
-            m_img = re.search(r"https://[^\s\)\"']+lazcdn\.com[^\s\)\"']+\.(?:jpg|jpeg|png|webp)", j_text)
-            if m_img:
-                image_url = m_img.group(0)
+        m_img = re.search(
+            r"https://[^\s\)\"']+lazcdn\.com[^\s\)\"']+\.(?:jpg|jpeg|png|webp)",
+            page_text,
+        )
+        if m_img:
+            image_url = m_img.group(0)
 
         if not title or discount_price <= 0:
             return None
 
         if original_price <= discount_price:
-            original_price = round(discount_price * 1.28)
+            original_price = round(discount_price * random.uniform(1.25, 1.45))
 
-        discount_percent = max(5, round(((original_price - discount_price) / original_price) * 100))
+        discount_percent = max(10, round(((original_price - discount_price) / original_price) * 100))
 
         return {
             "pid": pid,
@@ -97,48 +117,51 @@ def scrape_product_page(url):
             "clean_url": clean_url,
         }
     except Exception as e:
-        print(f"Scrape error for {url}: {e}")
+        print(f"Scrape error: {e}")
         return None
 
-def discover_daraz_urls():
+def discover_daraz_offers():
     urls = []
-    keywords = [
-        "smart watch", "tws earbuds", "power bank", "trimmer",
-        "bluetooth speaker", "backpack", "led light", "wallet",
-        "sunglasses", "kitchen gadgets", "perfume", "neckband"
+    offer_keywords = [
+        "flash sale", "smart watch", "tws earbuds", "power bank",
+        "trimmer", "bluetooth speaker", "backpack", "led light",
+        "wallet", "sunglasses", "kitchen gadgets", "perfume",
+        "neckband", "mobile stand", "wireless mouse", "fashion bag"
     ]
-    chosen = random.choice(keywords)
-    print(f"Searching Daraz catalog for: {chosen}")
+    chosen = random.choice(offer_keywords)
+    print(f"Auto-hunting Daraz deals for: {chosen}")
 
-    search_targets = [
-        f"https://r.jina.ai/https://www.daraz.com.bd/catalog/?q={urllib.parse.quote(chosen)}",
-        f"https://r.jina.ai/https://www.bing.com/search?q={urllib.parse.quote('site:daraz.com.bd/products/ ' + chosen)}",
+    sources = [
+        f"https://www.daraz.com.bd/catalog/?q={urllib.parse.quote(chosen)}&sort=order",
+        f"https://www.daraz.com.bd/wow/gcp/route/daraz/bd/upr/router?pha=true&hybrid=1&wx_navbar_transparent=true&wh_pid=%2Flazada%2Fmegascenario%2Fbd%2Fflash-sale",
+        f"https://www.bing.com/search?q={urllib.parse.quote('site:daraz.com.bd/products/ ' + chosen)}",
     ]
 
-    for target in search_targets:
-        try:
-            res = requests.get(target, headers={"Accept": "text/plain"}, timeout=25)
-            if res.status_code == 200:
-                decoded = urllib.parse.unquote(res.text)
-                found = re.findall(r"(?:https?:)?//www\.daraz\.com\.bd/products/[a-zA-Z0-9\-]+-i\d+-s\d+\.html", decoded)
-                for u in found:
-                    full_u = "https:" + u if u.startswith("//") else u
-                    if full_u not in urls:
-                        urls.append(full_u)
-            if len(urls) >= 8:
-                break
-        except Exception as e:
-            print(f"Discovery warning: {e}")
+    for src in sources:
+        content = fetch_via_proxy(src)
+        if not content:
+            continue
+        decoded = urllib.parse.unquote(content)
+        found = re.findall(
+            r"(?:https?:)?//www\.daraz\.com\.bd/products/[a-zA-Z0-9\-]+-i\d+-s\d+\.html",
+            decoded,
+        )
+        for u in found:
+            full_u = "https:" + u if u.startswith("//") else u
+            if full_u not in urls:
+                urls.append(full_u)
+        if len(urls) >= 10:
+            break
 
     random.shuffle(urls)
-    return urls[:8]
+    return urls[:10]
 
 def main():
     queue_ws, history_ws = get_sheets()
     all_rows = queue_ws.get_all_values()
     existing_ids = set(queue_ws.col_values(1)[1:] + history_ws.col_values(1)[1:])
 
-    # ধাপ ১: শিটের H কলামে ম্যানুয়ালি পেস্ট করা কোনো লিংক থাকলে সেটির তথ্য পূরণ করা
+    # শিটে কোনো অসম্পূর্ণ সারি থাকলে তা পূরণ করা
     for idx, row in enumerate(all_rows[1:], start=2):
         link_cell = row[7].strip() if len(row) > 7 else ""
         title_cell = row[1].strip() if len(row) > 1 else ""
@@ -157,17 +180,16 @@ def main():
                 ]
                 queue_ws.update(f"A{idx}:H{idx}", [updated])
                 existing_ids.add(info["pid"])
-                print(f"Auto-filled manual link row {idx}: {info['title']}")
 
-    # শিটে ইতিমধ্যে ৫টি বা তার বেশি ডিল জমা থাকলে নতুন করে খোঁজার দরকার নেই
-    current_queue_count = len(queue_ws.get_all_values()) - 1
-    if current_queue_count >= 5:
-        print(f"Queue already has {current_queue_count} deals. Skipping auto-discovery.")
+    # শিটে ইতিমধ্যে ৬টি বা তার বেশি অফার জমা থাকলে নতুন করে না খোঁজা
+    current_queue = len(queue_ws.get_all_values()) - 1
+    if current_queue >= 6:
+        print(f"Queue has {current_queue} offers ready. No need to fetch more right now.")
         return
 
-    # ধাপ ২: অটোমেটিক নতুন ডিল খুঁজে শিটে যোগ করা
-    product_urls = discover_daraz_urls()
-    print(f"Found {len(product_urls)} product URLs.")
+    # অটোমেটিক নতুন অফার খুঁজে শিটে যোগ করা
+    product_urls = discover_daraz_offers()
+    print(f"Discovered {len(product_urls)} offer links.")
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
 
     added = 0
@@ -191,9 +213,9 @@ def main():
         ])
         existing_ids.add(info["pid"])
         added += 1
-        print(f"Added auto deal: {info['title']}")
+        print(f"Auto-added offer: {info['title']}")
 
-    print(f"Total new deals added: {added}")
+    print(f"Finished. Added {added} new offers.")
 
 if __name__ == "__main__":
     main()
