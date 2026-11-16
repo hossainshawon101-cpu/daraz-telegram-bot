@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import html
 from datetime import datetime, timezone, timedelta
@@ -14,7 +15,13 @@ def get_sheets():
     ]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(os.environ["SHEET_ID"])
+    raw_sheet = os.environ.get("SHEET_ID", "").strip()
+    m = re.search(r"/d/([a-zA-Z0-9-_]+)", raw_sheet)
+    sheet_id = m.group(1) if m else raw_sheet
+    try:
+        sheet = client.open_by_key(sheet_id)
+    except Exception:
+        sheet = client.open("Daraz_Affiliate_Automation")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
 
 def send_telegram_post(bot_token, chat_id, caption, image_url):
@@ -79,4 +86,34 @@ def main():
     disc_price = row[3] if len(row) > 3 else ""
     disc_pct = row[4] if len(row) > 4 else ""
     rating = row[5] if len(row) > 5 else "4.5"
-    image_url = row[6] if len(row) >
+    image_url = row[6] if len(row) > 6 else ""
+    aff_link = row[7] if len(row) > 7 else ""
+
+    if not title or not aff_link:
+        print("Row 2 is incomplete, skipping.")
+        return
+
+    tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
+    if tracking_param and "exlaz=" not in aff_link and "s.daraz.com.bd" not in aff_link:
+        sep = "&" if "?" in aff_link else "?"
+        aff_link = f"{aff_link}{sep}{tracking_param}"
+
+    safe_title = html.escape(title)
+    caption = (
+        f"🔥 <b>{safe_title}</b>\n\n"
+        f"💰 <b>Offer Price:</b> ৳{disc_price} <s>৳{orig_price}</s>\n"
+        f"📉 <b>Discount:</b> {disc_pct} OFF\n"
+        f"⭐ <b>Rating:</b> {rating}/5\n\n"
+        f"🛒 <b>Order Now:</b>\n{aff_link}"
+    )
+
+    send_telegram_post(bot_token, chat_id, caption, image_url)
+    print(f"Successfully posted to {chat_id}: {title}")
+
+    bd_time = datetime.now(timezone(timedelta(hours=6))).strftime("%Y-%m-%d %H:%M:%S")
+    history_ws.append_row([pid, title, orig_price, disc_price, disc_pct, rating, image_url, aff_link, bd_time])
+    queue_ws.delete_rows(2)
+    print("Moved deal to Posted_History and removed from Queue.")
+
+if __name__ == "__main__":
+    main()
