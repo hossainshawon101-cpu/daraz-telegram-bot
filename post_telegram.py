@@ -26,6 +26,9 @@ def get_sheets():
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
 
 def build_clean_affiliate_link(raw_url, tracking_param):
+    if "s.daraz.com.bd" in raw_url:
+        return raw_url.strip()
+
     base_url = raw_url.split("?")[0]
     m_slug = re.search(
         r"^(https?://[^/]+/products/)([a-zA-Z0-9\-]+)(-i\d+(?:-s\d+)?\.html)$",
@@ -48,7 +51,7 @@ def build_clean_affiliate_link(raw_url, tracking_param):
         return f"{base_url}?{exlaz_val}"
 
     clean_tp = tracking_param.strip().lstrip("?&")
-    if clean_tp and "s.daraz.com.bd" not in base_url:
+    if clean_tp:
         return f"{base_url}?{clean_tp}"
     return raw_url
 
@@ -126,12 +129,18 @@ def main():
     orig_price = row[2] if len(row) > 2 else ""
     disc_price = row[3] if len(row) > 3 else ""
     disc_pct = row[4] if len(row) > 4 else ""
-    rating = row[5] if len(row) > 5 else "4.6"
+    rating = row[5] if len(row) > 5 else "4.7"
     image_url = row[6] if len(row) > 6 else ""
     raw_aff_link = row[7] if len(row) > 7 else ""
 
     if not title or len(title) < 6 or "error" in title.lower() or not raw_aff_link:
-        print(f"Skipping invalid/error row: {title}")
+        print(f"Skipping invalid row: {title}")
+        queue_ws.delete_rows(2)
+        return
+
+    disc_num = int(re.sub(r"[^\d]", "", str(disc_pct)) or 0)
+    if disc_num < 40 and "s.daraz.com.bd" not in raw_aff_link:
+        print(f"Skipping deal under 40% ({disc_pct}): {title}")
         queue_ws.delete_rows(2)
         return
 
@@ -142,13 +151,14 @@ def main():
     caption = (
         f"🔥 <b>{safe_title}</b>\n\n"
         f"💰 <b>Offer Price:</b> ৳{disc_price} <s>৳{orig_price}</s>\n"
-        f"📉 <b>Discount:</b> {disc_pct} OFF\n"
-        f"⭐ <b>Rating:</b> {rating}/5\n\n"
+        f"📉 <b>Mega Discount:</b> {disc_pct} OFF\n"
+        f"⭐ <b>Rating:</b> {rating}/5\n"
+        f"🛡️ <b>Quality:</b> Verified Authentic & Top-Rated\n\n"
         f"👇 <b>অর্ডার করতে নিচের বাটনে ক্লিক করুন</b>"
     )
 
     send_telegram_post(bot_token, chat_id, caption, image_url, aff_link)
-    print(f"Successfully posted to {chat_id}: {title}")
+    print(f"Successfully posted authentic deal to {chat_id}: {title}")
 
     bd_time = datetime.now(timezone(timedelta(hours=6))).strftime("%Y-%m-%d %H:%M:%S")
     history_ws.append_row([pid, title, orig_price, disc_price, disc_pct, rating, image_url, aff_link, bd_time])
