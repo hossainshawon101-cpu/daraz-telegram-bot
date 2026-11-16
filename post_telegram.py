@@ -94,16 +94,17 @@ def main():
 
     row = rows[1]
     pid = row[0] if len(row) > 0 else ""
-    title = row[1] if len(row) > 1 else ""
+    title = row[1].strip() if len(row) > 1 else ""
     orig_price = row[2] if len(row) > 2 else ""
     disc_price = row[3] if len(row) > 3 else ""
     disc_pct = row[4] if len(row) > 4 else ""
-    rating = row[5] if len(row) > 5 else "4.5"
+    rating = row[5] if len(row) > 5 else "4.6"
     image_url = row[6] if len(row) > 6 else ""
     aff_link = row[7] if len(row) > 7 else ""
 
-    if not title or not aff_link:
-        print("Row 2 is incomplete, skipping.")
+    if not title or len(title) < 6 or "error" in title.lower() or not aff_link:
+        print(f"Skipping invalid/error row: {title}")
+        queue_ws.delete_rows(2)
         return
 
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
