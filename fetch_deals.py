@@ -21,7 +21,13 @@ def get_sheets():
     ]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(os.environ["SHEET_ID"])
+    raw_sheet = os.environ.get("SHEET_ID", "").strip()
+    m = re.search(r"/d/([a-zA-Z0-9-_]+)", raw_sheet)
+    sheet_id = m.group(1) if m else raw_sheet
+    try:
+        sheet = client.open_by_key(sheet_id)
+    except Exception:
+        sheet = client.open("Daraz_Affiliate_Automation")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
 
 def scrape_product_page(url):
@@ -39,7 +45,6 @@ def scrape_product_page(url):
         original_price = 0
         rating = 4.5
 
-        # JSON-LD ডাটা থেকে তথ্য নেওয়া
         for ld_match in re.findall(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', page, re.S):
             try:
                 data = json.loads(ld_match.strip())
@@ -61,7 +66,6 @@ def scrape_product_page(url):
             except Exception:
                 continue
 
-        # ব্যাকআপ মেটা ট্যাগ থেকে টাইটেল ও ছবি
         if not title:
             m_title = re.search(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', page)
             if m_title:
@@ -75,7 +79,6 @@ def scrape_product_page(url):
         if image_url.startswith("//"):
             image_url = "https:" + image_url
 
-        # ব্যাকআপ দাম বের করা
         if discount_price <= 0:
             m_price = re.search(r'"salePrice"\s*:\s*\{[^}]*"value"\s*:\s*([\d.]+)', page) or re.search(r'"price"\s*:\s*([\d.]+)', page)
             if m_price:
@@ -118,7 +121,8 @@ def search_daraz_urls(keyword):
     for s_url in search_endpoints:
         try:
             res = requests.get(s_url, headers=HEADERS, timeout=20)
-            found = re.findall(r"https://www\.daraz\.com\.bd/products/[a-zA-Z0-9\-]+-i\d+-s\d+\.html", res.text)
+            decoded_text = urllib.parse.unquote(res.text)
+            found = re.findall(r"https://www\.daraz\.com\.bd/products/[a-zA-Z0-9\-]+-i\d+-s\d+\.html", decoded_text)
             for u in found:
                 if u not in urls:
                     urls.append(u)
@@ -133,7 +137,6 @@ def main():
     all_rows = queue_ws.get_all_values()
     existing_ids = set(queue_ws.col_values(1)[1:] + history_ws.col_values(1)[1:])
 
-    # ধাপ ১: শিটের H কলামে আপনি নিজে কোনো লিংক পেস্ট করলে সেটির তথ্য অটো পূরণ করা
     for idx, row in enumerate(all_rows[1:], start=2):
         link_cell = row[7].strip() if len(row) > 7 else ""
         title_cell = row[1].strip() if len(row) > 1 else ""
@@ -154,7 +157,6 @@ def main():
                 existing_ids.add(info["pid"])
                 print(f"Auto-filled manual link row {idx}: {info['title']}")
 
-    # ধাপ ২: অটোমেটিক নতুন ডিল খুঁজে শিটে যোগ করা
     categories = [
         "smart watch", "tws earbuds", "power bank", "trimmer",
         "bluetooth speaker", "backpack", "kitchen gadgets", "led light"
