@@ -2,6 +2,7 @@ import os
 import re
 import json
 import html
+import urllib.parse
 from datetime import datetime, timezone, timedelta
 import requests
 import gspread
@@ -23,6 +24,33 @@ def get_sheets():
     except Exception:
         sheet = client.open("Daraz_Affiliate_Automation")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
+
+def build_clean_affiliate_link(raw_url, tracking_param):
+    base_url = raw_url.split("?")[0]
+    m_slug = re.search(
+        r"^(https?://[^/]+/products/)([a-zA-Z0-9\-]+)(-i\d+(?:-s\d+)?\.html)$",
+        base_url,
+    )
+    if m_slug:
+        short_slug = "-".join(m_slug.group(2).split("-")[:3]) or "deal"
+        base_url = f"{m_slug.group(1)}{short_slug}{m_slug.group(3)}"
+
+    exlaz_val = ""
+    for src in (raw_url, tracking_param):
+        m_ex = re.search(r"(?:^|[?&])(exlaz=[^&]+)", src)
+        if m_ex:
+            exlaz_val = m_ex.group(1)
+            break
+
+    if exlaz_val:
+        if "%25" in exlaz_val:
+            exlaz_val = urllib.parse.unquote(exlaz_val)
+        return f"{base_url}?{exlaz_val}"
+
+    clean_tp = tracking_param.strip().lstrip("?&")
+    if clean_tp and "s.daraz.com.bd" not in base_url:
+        return f"{base_url}?{clean_tp}"
+    return raw_url
 
 def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
     base_url = f"https://api.telegram.org/bot{bot_token}"
@@ -100,26 +128,23 @@ def main():
     disc_pct = row[4] if len(row) > 4 else ""
     rating = row[5] if len(row) > 5 else "4.6"
     image_url = row[6] if len(row) > 6 else ""
-    aff_link = row[7] if len(row) > 7 else ""
+    raw_aff_link = row[7] if len(row) > 7 else ""
 
-    if not title or len(title) < 6 or "error" in title.lower() or not aff_link:
+    if not title or len(title) < 6 or "error" in title.lower() or not raw_aff_link:
         print(f"Skipping invalid/error row: {title}")
         queue_ws.delete_rows(2)
         return
 
-    tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
-    if tracking_param and "exlaz=" not in aff_link and "s.daraz.com.bd" not in aff_link:
-        sep = "&" if "?" in aff_link else "?"
-        aff_link = f"{aff_link}{sep}{tracking_param}"
+    tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "")
+    aff_link = build_clean_affiliate_link(raw_aff_link, tracking_param)
 
     safe_title = html.escape(title)
-    safe_link = html.escape(aff_link, quote=True)
     caption = (
         f"🔥 <b>{safe_title}</b>\n\n"
         f"💰 <b>Offer Price:</b> ৳{disc_price} <s>৳{orig_price}</s>\n"
         f"📉 <b>Discount:</b> {disc_pct} OFF\n"
         f"⭐ <b>Rating:</b> {rating}/5\n\n"
-        f"👉 <a href=\"{safe_link}\"><b>এখানে ক্লিক করে দারাজ থেকে অর্ডার করুন</b></a>"
+        f"👇 <b>অর্ডার করতে নিচের বাটনে ক্লিক করুন</b>"
     )
 
     send_telegram_post(bot_token, chat_id, caption, image_url, aff_link)
