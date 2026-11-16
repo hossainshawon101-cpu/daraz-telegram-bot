@@ -24,23 +24,35 @@ def get_sheets():
         sheet = client.open("Daraz_Affiliate_Automation")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
 
-def send_telegram_post(bot_token, chat_id, caption, image_url):
+def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
     base_url = f"https://api.telegram.org/bot{bot_token}"
-    
+    reply_markup = json.dumps({
+        "inline_keyboard": [[{"text": "🛒 Order Now on Daraz", "url": aff_link}]]
+    })
+
     if image_url and image_url.startswith("http"):
-        res = requests.post(
-            f"{base_url}/sendPhoto",
-            data={
-                "chat_id": chat_id,
-                "photo": image_url,
-                "caption": caption,
-                "parse_mode": "HTML",
-            },
-            timeout=20,
-        ).json()
-        if res.get("ok"):
-            return True
-        print("Photo send failed, falling back to text:", res)
+        try:
+            img_res = requests.get(
+                image_url,
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=15,
+            )
+            if img_res.status_code == 200 and len(img_res.content) > 1000:
+                res = requests.post(
+                    f"{base_url}/sendPhoto",
+                    data={
+                        "chat_id": chat_id,
+                        "caption": caption,
+                        "parse_mode": "HTML",
+                        "reply_markup": reply_markup,
+                    },
+                    files={"photo": ("deal.jpg", img_res.content, "image/jpeg")},
+                    timeout=25,
+                ).json()
+                if res.get("ok"):
+                    return True
+        except Exception as e:
+            print("Image upload fallback:", e)
 
     res = requests.post(
         f"{base_url}/sendMessage",
@@ -48,6 +60,7 @@ def send_telegram_post(bot_token, chat_id, caption, image_url):
             "chat_id": chat_id,
             "text": caption,
             "parse_mode": "HTML",
+            "reply_markup": reply_markup,
             "disable_web_page_preview": False,
         },
         timeout=20,
@@ -99,15 +112,16 @@ def main():
         aff_link = f"{aff_link}{sep}{tracking_param}"
 
     safe_title = html.escape(title)
+    safe_link = html.escape(aff_link, quote=True)
     caption = (
         f"🔥 <b>{safe_title}</b>\n\n"
         f"💰 <b>Offer Price:</b> ৳{disc_price} <s>৳{orig_price}</s>\n"
         f"📉 <b>Discount:</b> {disc_pct} OFF\n"
         f"⭐ <b>Rating:</b> {rating}/5\n\n"
-        f"🛒 <b>Order Now:</b>\n{aff_link}"
+        f"👉 <a href=\"{safe_link}\"><b>এখানে ক্লিক করে অর্ডার করুন</b></a>"
     )
 
-    send_telegram_post(bot_token, chat_id, caption, image_url)
+    send_telegram_post(bot_token, chat_id, caption, image_url, aff_link)
     print(f"Successfully posted to {chat_id}: {title}")
 
     bd_time = datetime.now(timezone(timedelta(hours=6))).strftime("%Y-%m-%d %H:%M:%S")
