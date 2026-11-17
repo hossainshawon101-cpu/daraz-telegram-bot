@@ -14,27 +14,37 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-AUTHENTIC_DEAL_QUERIES = [
-    "DarazMall flash sale",
-    "Flagship Store best seller",
-    "Official Store discount deal",
-    "100% authentic smart watch",
-    "DarazMall tws earbuds",
-    "Official Store trimmer",
-    "authentic perfume best seller",
-    "DarazMall power bank",
-    "Flagship Store backpack",
-    "authentic women bag fancy",
-    "DarazMall kitchen gadget",
-    "Official Store men watch",
-    "authentic skincare face wash",
-    "DarazMall bluetooth speaker",
-    "best seller aesthetic room lamp",
-    "cheapest gadget under 299 best seller",
-    "DarazMall sunglasses stylish",
-    "Official Store electric kettle",
-    "authentic leather wallet men",
-    "DarazMall home organizer",
+# নিত্যপ্রয়োজনীয় (Daily Needed), গ্রোসারি, পার্সোনাল কেয়ার, হোম ও মেগা ডিসকাউন্ট কুয়েরি
+DAILY_AND_MEGA_QUERIES = [
+    # Daily Personal Care & Grooming
+    "DarazMall face wash discount",
+    "Official Store shampoo offer",
+    "authentic sunscreen lotion deal",
+    "DarazMall body spray perfume",
+    "Official Store trimmer best seller",
+    "electric toothbrush authentic deal",
+    # Daily Kitchen & Home Essentials
+    "insulated water bottle flask deal",
+    "airtight food storage box set",
+    "microfiber floor mop cleaning deal",
+    "rechargeable led emergency bulb",
+    "cotton bedsheet pillow cover offer",
+    "kitchen rack organizer best seller",
+    "electric kettle DarazMall offer",
+    "mini blender juicer discount",
+    # Daily Grocery & Health
+    "pure sundarban honey offer",
+    "green tea coffee jar discount",
+    "extra virgin olive oil authentic",
+    # Daily Tech, Fashion & Budget Deals
+    "fast charging cable adapter DarazMall",
+    "tws earbuds best seller discount",
+    "smart watch mega offer",
+    "men cotton t shirt combo offer",
+    "women daily handbag backpack deal",
+    "cheapest daily gadget under 199",
+    "flash sale best seller under 299",
+    "aesthetic room lamp decor deal",
 ]
 
 BAD_TITLES = {
@@ -309,10 +319,8 @@ def scrape_product_page(url, is_manual=False):
 
         if not is_manual:
             if rating > 0 and rating < 4.3:
-                print(f"Skipped low-rated product ({rating}): {title[:40]}")
                 return None
             if not is_official and review_count < 3:
-                print(f"Skipped unverified product (no DarazMall/reviews): {title[:40]}")
                 return None
 
         if rating <= 0:
@@ -327,7 +335,6 @@ def scrape_product_page(url, is_manual=False):
             discount_percent = 0
 
         if not is_manual and (discount_percent < 40 or discount_percent > 92):
-            print(f"Skipped discount ({discount_percent}%): {title[:40]}")
             return None
 
         if original_price <= discount_price:
@@ -346,8 +353,7 @@ def scrape_product_page(url, is_manual=False):
             "image_url": image_url,
             "clean_url": url.strip() if is_short else fetch_target,
         }
-    except Exception as e:
-        print(f"Scrape error: {e}")
+    except Exception:
         return None
 
 
@@ -400,11 +406,11 @@ def fetch_sitemap_links():
     return list(dict.fromkeys(urls))
 
 
-def discover_authentic_offers():
+def discover_daily_offers():
     urls = []
-    chosen_queries = random.sample(AUTHENTIC_DEAL_QUERIES, 2)
+    chosen_queries = random.sample(DAILY_AND_MEGA_QUERIES, 2)
     for q_text in chosen_queries:
-        print(f"Hunting authentic 40%+ deals for: {q_text}")
+        print(f"Hunting daily & mega 40%+ deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         search_urls = [
             f"https://html.duckduckgo.com/html/?q={q}",
@@ -415,7 +421,7 @@ def discover_authentic_offers():
             for u in extract_daraz_links(content):
                 if u not in urls:
                     urls.append(u)
-            if len(urls) >= 8:
+            if len(urls) >= 9:
                 break
 
     if len(urls) < 4:
@@ -424,7 +430,7 @@ def discover_authentic_offers():
                 urls.append(u)
 
     random.shuffle(urls)
-    return urls[:8]
+    return urls[:9]
 
 
 def main():
@@ -465,12 +471,11 @@ def main():
             existing_ids.add(row[0].strip())
 
     current_queue = len(queue_ws.get_all_values()) - 1
-    if current_queue >= 5:
-        print(f"Queue already has {current_queue} verified authentic deals.")
+    if current_queue >= 6:
+        print(f"Queue already has {current_queue} verified daily deals.")
         return
 
-    product_urls = discover_authentic_offers()
-    print(f"Verifying {len(product_urls)} candidate products for authenticity & 40%+ discount...")
+    product_urls = discover_daily_offers()
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
 
     valid_deals = []
@@ -480,7 +485,7 @@ def main():
             continue
         existing_ids.add(info["pid"])
         valid_deals.append(info)
-        if len(valid_deals) >= 4:
+        if len(valid_deals) >= 5:
             break
 
     valid_deals.sort(key=lambda x: (x["is_official"], x["disc_val"]), reverse=True)
@@ -503,10 +508,9 @@ def main():
             aff_link,
         ])
         added += 1
-        tag = "DarazMall/Official" if info["is_official"] else "Verified Top-Rated"
-        print(f"Added [{tag}] ({info['discount_percent']} OFF): {info['title']}")
+        print(f"Added Daily Mega Deal ({info['discount_percent']} OFF): {info['title']}")
 
-    print(f"Finished. Added {added} authentic 40%+ deals.")
+    print(f"Finished. Added {added} daily 40%+ deals.")
 
 
 if __name__ == "__main__":
