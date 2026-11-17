@@ -93,7 +93,7 @@ def fetch_via_proxy(target_url):
         r = requests.get(
             f"https://r.jina.ai/{target_url}",
             headers={"Accept": "text/plain"},
-            timeout=25,
+            timeout=12,
         )
         if r.status_code == 200 and len(r.text) > 300:
             return r.text
@@ -102,7 +102,7 @@ def fetch_via_proxy(target_url):
 
     try:
         encoded = urllib.parse.quote(target_url, safe="")
-        r2 = requests.get(f"https://api.allorigins.win/raw?url={encoded}", timeout=25)
+        r2 = requests.get(f"https://api.allorigins.win/raw?url={encoded}", timeout=12)
         if r2.status_code == 200 and len(r2.text) > 300:
             return r2.text
     except Exception:
@@ -230,7 +230,7 @@ def scrape_product_page(url, is_manual=False):
         review_count = 0
 
         try:
-            res = requests.get(fetch_target, headers=HEADERS, allow_redirects=True, timeout=20)
+            res = requests.get(fetch_target, headers=HEADERS, allow_redirects=True, timeout=10)
             if res.status_code == 200:
                 if is_short and "-i" in res.url:
                     m_p = re.search(r"-i(\d+)", res.url)
@@ -245,7 +245,7 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0 or original_price <= discount_price:
             try:
                 p_url = f"https://api.allorigins.win/raw?url={urllib.parse.quote(fetch_target, safe='')}"
-                p_res = requests.get(p_url, timeout=25)
+                p_res = requests.get(p_url, timeout=12)
                 if p_res.status_code == 200:
                     t2, img2, dp2, op2, r2, off2, rev2 = parse_html_product(p_res.text)
                     if is_valid_and_authentic_title(t2):
@@ -263,40 +263,41 @@ def scrape_product_page(url, is_manual=False):
             except Exception:
                 pass
 
-        j_text = fetch_via_proxy(fetch_target)
-        if j_text and "error 403" not in j_text.lower() and "target url returned error" not in j_text.lower():
-            off3, rev3 = check_authenticity_signals(j_text)
-            is_official = is_official or off3
-            review_count = max(review_count, rev3)
+        if not is_valid_and_authentic_title(title) or discount_price <= 0 or (not is_official and review_count < 3):
+            j_text = fetch_via_proxy(fetch_target)
+            if j_text and "error 403" not in j_text.lower() and "target url returned error" not in j_text.lower():
+                off3, rev3 = check_authenticity_signals(j_text)
+                is_official = is_official or off3
+                review_count = max(review_count, rev3)
 
-            top_section = j_text[:3500]
-            if not is_valid_and_authentic_title(title):
-                m_t = re.search(r"^Title:\s*(.+)$", top_section, re.M) or re.search(r"^#\s+(.+)$", top_section, re.M)
-                if m_t:
-                    cand = html.unescape(m_t.group(1)).replace("| Daraz.com.bd", "").strip()
-                    if is_valid_and_authentic_title(cand):
-                        title = cand
+                top_section = j_text[:3500]
+                if not is_valid_and_authentic_title(title):
+                    m_t = re.search(r"^Title:\s*(.+)$", top_section, re.M) or re.search(r"^#\s+(.+)$", top_section, re.M)
+                    if m_t:
+                        cand = html.unescape(m_t.group(1)).replace("| Daraz.com.bd", "").strip()
+                        if is_valid_and_authentic_title(cand):
+                            title = cand
 
-            raw_prices = re.findall(r"৳\s*([\d,]+)", top_section)
-            valid_prices = [int(p.replace(",", "")) for p in raw_prices if 30 <= int(p.replace(",", "")) <= 50000]
-            if valid_prices and discount_price <= 0:
-                discount_price = valid_prices[0]
-            if len(valid_prices) > 1 and valid_prices[1] > discount_price and original_price <= discount_price:
-                original_price = valid_prices[1]
+                raw_prices = re.findall(r"৳\s*([\d,]+)", top_section)
+                valid_prices = [int(p.replace(",", "")) for p in raw_prices if 30 <= int(p.replace(",", "")) <= 50000]
+                if valid_prices and discount_price <= 0:
+                    discount_price = valid_prices[0]
+                if len(valid_prices) > 1 and valid_prices[1] > discount_price and original_price <= discount_price:
+                    original_price = valid_prices[1]
 
-            m_badge = re.search(r"-(\d{2})%", top_section) or re.search(r"(\d{2})%\s*OFF", top_section, re.I)
-            if m_badge:
-                badge_discount = int(m_badge.group(1))
+                m_badge = re.search(r"-(\d{2})%", top_section) or re.search(r"(\d{2})%\s*OFF", top_section, re.I)
+                if m_badge:
+                    badge_discount = int(m_badge.group(1))
 
-            if rating <= 0:
-                m_rat = re.search(r"([45]\.\d)\s*/\s*5", top_section)
-                if m_rat:
-                    rating = float(m_rat.group(1))
+                if rating <= 0:
+                    m_rat = re.search(r"([45]\.\d)\s*/\s*5", top_section)
+                    if m_rat:
+                        rating = float(m_rat.group(1))
 
-            if not image_url:
-                m_img = re.search(r"https://[^\s\)\"']+lazcdn\.com[^\s\)\"']+\.(?:jpg|jpeg|png|webp)", j_text)
-                if m_img:
-                    image_url = m_img.group(0)
+                if not image_url:
+                    m_img = re.search(r"https://[^\s\)\"']+lazcdn\.com[^\s\)\"']+\.(?:jpg|jpeg|png|webp)", j_text)
+                    if m_img:
+                        image_url = m_img.group(0)
 
         if not is_valid_and_authentic_title(title):
             slug_t = title_from_slug(fetch_target)
@@ -370,7 +371,7 @@ def fetch_sitemap_links():
     urls = []
     loc_pattern = chr(60) + r"loc>(https?://[^" + chr(60) + r"]+)" + chr(60) + r"/loc>"
     try:
-        res = requests.get("https://www.daraz.com.bd/sitemap.xml", headers=HEADERS, timeout=20)
+        res = requests.get("https://www.daraz.com.bd/sitemap.xml", headers=HEADERS, timeout=12)
         xml_text = (
             gzip.decompress(res.content).decode("utf-8", errors="ignore")
             if res.content[:2] == b"\x1f\x8b"
@@ -385,14 +386,14 @@ def fetch_sitemap_links():
         if not urls and sub_sitemaps:
             random.shuffle(sub_sitemaps)
             for sub in sub_sitemaps[:2]:
-                r2 = requests.get(sub, headers=HEADERS, timeout=20)
+                r2 = requests.get(sub, headers=HEADERS, timeout=12)
                 st = (
                     gzip.decompress(r2.content).decode("utf-8", errors="ignore")
                     if (sub.endswith(".gz") or r2.content[:2] == b"\x1f\x8b")
                     else r2.text
                 )
                 urls.extend(extract_daraz_links(st))
-                if len(urls) >= 25:
+                if len(urls) >= 15:
                     break
     except Exception:
         pass
@@ -401,30 +402,29 @@ def fetch_sitemap_links():
 
 def discover_authentic_offers():
     urls = []
-    chosen_queries = random.sample(AUTHENTIC_DEAL_QUERIES, 3)
+    chosen_queries = random.sample(AUTHENTIC_DEAL_QUERIES, 2)
     for q_text in chosen_queries:
         print(f"Hunting authentic 40%+ deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         search_urls = [
             f"https://html.duckduckgo.com/html/?q={q}",
             f"https://search.brave.com/search?q={q}",
-            f"https://www.bing.com/search?q={q}",
         ]
         for s_url in search_urls:
             content = fetch_via_proxy(s_url)
             for u in extract_daraz_links(content):
                 if u not in urls:
                     urls.append(u)
-            if len(urls) >= 12:
+            if len(urls) >= 8:
                 break
 
-    if len(urls) < 6:
+    if len(urls) < 4:
         for u in fetch_sitemap_links():
             if u not in urls:
                 urls.append(u)
 
     random.shuffle(urls)
-    return urls[:15]
+    return urls[:8]
 
 
 def main():
@@ -465,7 +465,7 @@ def main():
             existing_ids.add(row[0].strip())
 
     current_queue = len(queue_ws.get_all_values()) - 1
-    if current_queue >= 6:
+    if current_queue >= 5:
         print(f"Queue already has {current_queue} verified authentic deals.")
         return
 
@@ -480,7 +480,7 @@ def main():
             continue
         existing_ids.add(info["pid"])
         valid_deals.append(info)
-        if len(valid_deals) >= 6:
+        if len(valid_deals) >= 4:
             break
 
     valid_deals.sort(key=lambda x: (x["is_official"], x["disc_val"]), reverse=True)
