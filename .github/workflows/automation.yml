@@ -1,9 +1,7 @@
 name: Daraz Affiliate Auto Poster
 
 on:
-  schedule:
-    # বাংলাদেশ সময় সকাল ৮:১৭ থেকে রাত ১১:১৭ পর্যন্ত প্রতি ১ ঘণ্টা পরপর চলবে
-    - cron: '17 2-17 * * *'
+ 
   workflow_dispatch:
 
 jobs:
