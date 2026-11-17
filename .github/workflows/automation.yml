@@ -2,12 +2,14 @@ name: Daraz Affiliate Auto Poster
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    # বাংলাদেশ সময় সকাল ৮টা থেকে রাত ১২টা পর্যন্ত প্রতি ১ ঘণ্টা পরপর চলবে
+    - cron: '0 2-18 * * *'
   workflow_dispatch:
 
 jobs:
   run-automation:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
