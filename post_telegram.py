@@ -2,11 +2,13 @@ import os
 import re
 import json
 import html
+import random
 import urllib.parse
 from datetime import datetime, timezone, timedelta
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
+
 
 def get_sheets():
     creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
@@ -24,6 +26,7 @@ def get_sheets():
     except Exception:
         sheet = client.open("Daraz_Affiliate_Automation")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
+
 
 def build_clean_affiliate_link(raw_url, tracking_param):
     if "s.daraz.com.bd" in raw_url:
@@ -55,10 +58,63 @@ def build_clean_affiliate_link(raw_url, tracking_param):
         return f"{base_url}?{clean_tp}"
     return raw_url
 
-def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
+
+def build_human_style_post(title, orig_price, disc_price, disc_pct, rating):
+    safe_title = html.escape(title)
+    try:
+        saved_amount = max(0, int(float(orig_price)) - int(float(disc_price)))
+    except Exception:
+        saved_amount = 0
+
+    save_line = f" (সাশ্রয় হচ্ছে ৳{saved_amount}!)" if saved_amount >= 50 else ""
+
+    templates = [
+        (
+            f"🔥 <b>আজকের সেরা ডিল: {safe_title}</b>\n\n"
+            f"নিত্যদিনের প্রয়োজনে দারুণ একটি কালেকশন এখন বিশাল ছাড়ে পাওয়া যাচ্ছে!\n\n"
+            f"💸 <b>অফার প্রাইস:</b> ৳{disc_price} <s>৳{orig_price}</s>{save_line}\n"
+            f"🏷️ <b>ডিসকাউন্ট:</b> {disc_pct} OFF\n"
+            f"⭐ <b>কাস্টমার রেটিং:</b> {rating}/5 (১০০% অরিজিনাল)\n\n"
+            f"স্টক শেষ হওয়ার আগেই নিচের বাটন থেকে দেখে নিন 👇"
+        ),
+        (
+            f"⚡ <b>ফ্ল্যাশ অফার অ্যালার্ট! ({disc_pct} ছাড়)</b>\n\n"
+            f"📦 <b>{safe_title}</b>\n\n"
+            f"আগের দাম <s>৳{orig_price}</s> টাকা হলেও এখন পাচ্ছেন মাত্র <b>৳{disc_price} টাকায়</b>{save_line}।\n"
+            f"✅ ভেরিফায়েড সেলার ও {rating}/5 রিভিউ স্কোর।\n\n"
+            f"সরাসরি দারাজ থেকে অর্ডার করতে নিচে চাপুন 👇"
+        ),
+        (
+            f"🛍️ <b>বাজেটের মধ্যে দারুণ অফার — {disc_pct} OFF!</b>\n\n"
+            f"✨ {safe_title}\n\n"
+            f"💰 <b>ডিসকাউন্ট মূল্য:</b> ৳{disc_price} (রেগুলার <s>৳{orig_price}</s>)\n"
+            f"🌟 <b>রেটিং:</b> {rating}/5 | অরিজিনাল প্রোডাক্ট\n\n"
+            f"অফারটি সীমিত সময়ের জন্য, এখনই চেক করুন 👇"
+        ),
+        (
+            f"💥 <b>মেগা সেভিংস ডিল!</b>\n\n"
+            f"<b>{safe_title}</b>\n\n"
+            f"এখন কিনলে সরাসরি <b>{disc_pct} ছাড়</b> পাচ্ছেন! অফার প্রাইস মাত্র <b>৳{disc_price}</b> (আগের দাম <s>৳{orig_price}</s>){save_line}।\n"
+            f"🛡️ কোয়ালিটি চেকড ও টপ-রেটেড ({rating}/5)।\n\n"
+            f"নিচের বাটনে ক্লিক করে অর্ডার কনফার্ম করুন 👇"
+        ),
+    ]
+
+    button_labels = [
+        "🛒 অর্ডার করুন দারাজে",
+        "🔥 ডিলটি লুফে নিন",
+        "🛍️ অফার প্রাইসে কিনুন",
+        "⚡ এখনই দারাজে দেখুন",
+        "🛒 Order Now on Daraz",
+    ]
+
+    return random.choice(templates), random.choice(button_labels)
+
+
+def send_telegram_post(bot_token, chat_id, caption, button_text, image_url, aff_link):
     base_url = f"https://api.telegram.org/bot{bot_token}"
     reply_markup = json.dumps({
-        "inline_keyboard": [[{"text": "🛒 Order Now on Daraz", "url": aff_link}]]
+        "inline_keyboard": [[{"text": button_text, "url": aff_link}]]
     })
 
     if image_url and image_url.startswith("http"):
@@ -66,7 +122,7 @@ def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
             img_res = requests.get(
                 image_url,
                 headers={"User-Agent": "Mozilla/5.0"},
-                timeout=15,
+                timeout=12,
             )
             if img_res.status_code == 200 and len(img_res.content) > 1000:
                 res = requests.post(
@@ -78,7 +134,7 @@ def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
                         "reply_markup": reply_markup,
                     },
                     files={"photo": ("deal.jpg", img_res.content, "image/jpeg")},
-                    timeout=25,
+                    timeout=20,
                 ).json()
                 if res.get("ok"):
                     return True
@@ -94,11 +150,12 @@ def send_telegram_post(bot_token, chat_id, caption, image_url, aff_link):
             "reply_markup": reply_markup,
             "disable_web_page_preview": True,
         },
-        timeout=20,
+        timeout=15,
     ).json()
     if not res.get("ok"):
         raise RuntimeError(f"Telegram API Error: {res}")
     return True
+
 
 def main():
     bot_token = (
@@ -146,24 +203,16 @@ def main():
 
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "")
     aff_link = build_clean_affiliate_link(raw_aff_link, tracking_param)
+    caption, button_text = build_human_style_post(title, orig_price, disc_price, disc_pct, rating)
 
-    safe_title = html.escape(title)
-    caption = (
-        f"🔥 <b>{safe_title}</b>\n\n"
-        f"💰 <b>Offer Price:</b> ৳{disc_price} <s>৳{orig_price}</s>\n"
-        f"📉 <b>Mega Discount:</b> {disc_pct} OFF\n"
-        f"⭐ <b>Rating:</b> {rating}/5\n"
-        f"🛡️ <b>Quality:</b> Verified Authentic & Top-Rated\n\n"
-        f"👇 <b>অর্ডার করতে নিচের বাটনে ক্লিক করুন</b>"
-    )
-
-    send_telegram_post(bot_token, chat_id, caption, image_url, aff_link)
-    print(f"Successfully posted authentic deal to {chat_id}: {title}")
+    send_telegram_post(bot_token, chat_id, caption, button_text, image_url, aff_link)
+    print(f"Successfully posted natural deal to {chat_id}: {title}")
 
     bd_time = datetime.now(timezone(timedelta(hours=6))).strftime("%Y-%m-%d %H:%M:%S")
     history_ws.append_row([pid, title, orig_price, disc_price, disc_pct, rating, image_url, aff_link, bd_time])
     queue_ws.delete_rows(2)
     print("Moved deal to Posted_History and removed from Queue.")
+
 
 if __name__ == "__main__":
     main()
