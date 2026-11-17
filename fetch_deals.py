@@ -14,15 +14,21 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# নিত্যপ্রয়োজনীয় (Daily Needed), গ্রোসারি, পার্সোনাল কেয়ার, হোম ও মেগা ডিসকাউন্ট কুয়েরি
-DAILY_AND_MEGA_QUERIES = [
+# Kop Offers (11 Tk, Mystery Box, Flash Sale) + Daily Needed + Authentic Mega Deals
+KOP_AND_DAILY_QUERIES = [
+    # Viral Kop Offers & Budget Deals
+    "11 tk deal daraz",
+    "mystery box daraz offer",
+    "flash sale under 99 tk",
+    "free gift combo offer daraz",
+    "cheapest daily gadget under 199",
+    "mega discount deal under 299",
     # Daily Personal Care & Grooming
     "DarazMall face wash discount",
     "Official Store shampoo offer",
     "authentic sunscreen lotion deal",
     "DarazMall body spray perfume",
     "Official Store trimmer best seller",
-    "electric toothbrush authentic deal",
     # Daily Kitchen & Home Essentials
     "insulated water bottle flask deal",
     "airtight food storage box set",
@@ -31,20 +37,14 @@ DAILY_AND_MEGA_QUERIES = [
     "cotton bedsheet pillow cover offer",
     "kitchen rack organizer best seller",
     "electric kettle DarazMall offer",
-    "mini blender juicer discount",
-    # Daily Grocery & Health
+    # Daily Grocery, Tech & Fashion
     "pure sundarban honey offer",
     "green tea coffee jar discount",
-    "extra virgin olive oil authentic",
-    # Daily Tech, Fashion & Budget Deals
     "fast charging cable adapter DarazMall",
     "tws earbuds best seller discount",
     "smart watch mega offer",
     "men cotton t shirt combo offer",
     "women daily handbag backpack deal",
-    "cheapest daily gadget under 199",
-    "flash sale best seller under 299",
-    "aesthetic room lamp decor deal",
 ]
 
 BAD_TITLES = {
@@ -289,7 +289,7 @@ def scrape_product_page(url, is_manual=False):
                             title = cand
 
                 raw_prices = re.findall(r"৳\s*([\d,]+)", top_section)
-                valid_prices = [int(p.replace(",", "")) for p in raw_prices if 30 <= int(p.replace(",", "")) <= 50000]
+                valid_prices = [int(p.replace(",", "")) for p in raw_prices if 11 <= int(p.replace(",", "")) <= 50000]
                 if valid_prices and discount_price <= 0:
                     discount_price = valid_prices[0]
                 if len(valid_prices) > 1 and valid_prices[1] > discount_price and original_price <= discount_price:
@@ -334,7 +334,7 @@ def scrape_product_page(url, is_manual=False):
         else:
             discount_percent = 0
 
-        if not is_manual and (discount_percent < 40 or discount_percent > 92):
+        if not is_manual and (discount_percent < 40 or discount_percent > 95):
             return None
 
         if original_price <= discount_price:
@@ -406,11 +406,11 @@ def fetch_sitemap_links():
     return list(dict.fromkeys(urls))
 
 
-def discover_daily_offers():
+def discover_kop_and_daily_offers():
     urls = []
-    chosen_queries = random.sample(DAILY_AND_MEGA_QUERIES, 2)
+    chosen_queries = random.sample(KOP_AND_DAILY_QUERIES, 2)
     for q_text in chosen_queries:
-        print(f"Hunting daily & mega 40%+ deals for: {q_text}")
+        print(f"Hunting Kop & Daily 40%+ deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         search_urls = [
             f"https://html.duckduckgo.com/html/?q={q}",
@@ -472,10 +472,10 @@ def main():
 
     current_queue = len(queue_ws.get_all_values()) - 1
     if current_queue >= 6:
-        print(f"Queue already has {current_queue} verified daily deals.")
+        print(f"Queue already has {current_queue} verified deals.")
         return
 
-    product_urls = discover_daily_offers()
+    product_urls = discover_kop_and_daily_offers()
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
 
     valid_deals = []
@@ -508,9 +508,9 @@ def main():
             aff_link,
         ])
         added += 1
-        print(f"Added Daily Mega Deal ({info['discount_percent']} OFF): {info['title']}")
+        print(f"Added Kop/Daily Deal ({info['discount_percent']} OFF): {info['title']}")
 
-    print(f"Finished. Added {added} daily 40%+ deals.")
+    print(f"Finished. Added {added} verified 40%+ deals.")
 
 
 if __name__ == "__main__":
