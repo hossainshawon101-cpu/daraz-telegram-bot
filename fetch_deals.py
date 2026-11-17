@@ -14,7 +14,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# Kop Offers (11 Tk, Mystery Box, Flash Sale) + Daily Needed + Authentic Mega Deals
+# High-Converting Budget (Under 850 Tk), Kop Offers & Daily Needed Queries
 KOP_AND_DAILY_QUERIES = [
     # Viral Kop Offers & Budget Deals
     "11 tk deal daraz",
@@ -273,7 +273,7 @@ def scrape_product_page(url, is_manual=False):
             except Exception:
                 pass
 
-        if not is_valid_and_authentic_title(title) or discount_price <= 0 or (not is_official and review_count < 3):
+        if not is_valid_and_authentic_title(title) or discount_price <= 0 or review_count < 20:
             j_text = fetch_via_proxy(fetch_target)
             if j_text and "error 403" not in j_text.lower() and "target url returned error" not in j_text.lower():
                 off3, rev3 = check_authenticity_signals(j_text)
@@ -317,14 +317,17 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0:
             return None
 
+        # High-Converting Budget + Social Proof Filter (Max 850 Tk, 4.5+ Rating, 20+ Reviews)
         if not is_manual:
-            if rating > 0 and rating < 4.3:
+            if discount_price > 850:
                 return None
-            if not is_official and review_count < 3:
+            if rating > 0 and rating < 4.5:
+                return None
+            if review_count < 20:
                 return None
 
         if rating <= 0:
-            rating = 4.7 if is_official else 4.5
+            rating = 4.8 if is_official else 4.6
 
         if original_price > discount_price:
             discount_percent = round(((original_price - discount_price) / original_price) * 100)
@@ -410,7 +413,7 @@ def discover_kop_and_daily_offers():
     urls = []
     chosen_queries = random.sample(KOP_AND_DAILY_QUERIES, 2)
     for q_text in chosen_queries:
-        print(f"Hunting Kop & Daily 40%+ deals for: {q_text}")
+        print(f"Hunting High-Selling 40%+ deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         search_urls = [
             f"https://html.duckduckgo.com/html/?q={q}",
@@ -421,7 +424,7 @@ def discover_kop_and_daily_offers():
             for u in extract_daraz_links(content):
                 if u not in urls:
                     urls.append(u)
-            if len(urls) >= 9:
+            if len(urls) >= 10:
                 break
 
     if len(urls) < 4:
@@ -430,7 +433,7 @@ def discover_kop_and_daily_offers():
                 urls.append(u)
 
     random.shuffle(urls)
-    return urls[:9]
+    return urls[:10]
 
 
 def main():
@@ -472,7 +475,7 @@ def main():
 
     current_queue = len(queue_ws.get_all_values()) - 1
     if current_queue >= 6:
-        print(f"Queue already has {current_queue} verified deals.")
+        print(f"Queue already has {current_queue} verified high-converting deals.")
         return
 
     product_urls = discover_kop_and_daily_offers()
@@ -508,9 +511,9 @@ def main():
             aff_link,
         ])
         added += 1
-        print(f"Added Kop/Daily Deal ({info['discount_percent']} OFF): {info['title']}")
+        print(f"Added High-Converting Deal ({info['discount_percent']} OFF, ৳{info['discount_price']}): {info['title']}")
 
-    print(f"Finished. Added {added} verified 40%+ deals.")
+    print(f"Finished. Added {added} verified budget & high-review deals.")
 
 
 if __name__ == "__main__":
