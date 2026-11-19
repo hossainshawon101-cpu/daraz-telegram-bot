@@ -108,38 +108,58 @@ def build_human_style_post(title, orig_price, disc_price, disc_pct, rating):
         "🛒 Order Now on Daraz",
     ]
 
-    return random.choice(templates), random.choice(button_labels)
+    fb_caption = (
+        f"🔥 আজকের কোপ অফার ({disc_pct} OFF)!\n\n"
+        f"📦 {title}\n\n"
+        f"💸 অফার প্রাইস: মাত্র ৳{disc_price} টাকা (আগের দাম ৳{orig_price}){save_line}\n"
+        f"⭐ কাস্টমার রেটিং: {rating}/5 | ১০০% অরিজিনাল প্রোডাক্ট\n\n"
+        f"👇 সরাসরি দারাজ থেকে অর্ডার করার লিংক প্রথম কমেন্টে (First Comment) দেওয়া আছে!\n"
+        f"📢 আরও মেগা ডিল পেতে আমাদের Telegram Channel-এ জয়েন করুন: https://t.me/newarea101\n\n"
+        f"#DarazOffer #BestDealsBD #OnlineShoppingBD #FlashSale"
+    )
+
+    return random.choice(templates), random.choice(button_labels), fb_caption
 
 
-def send_telegram_post(bot_token, chat_id, caption, button_text, image_url, aff_link):
+def download_image_bytes(image_url):
+    if not image_url or not image_url.startswith("http"):
+        return None
+    try:
+        img_res = requests.get(
+            image_url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15,
+        )
+        if img_res.status_code == 200 and len(img_res.content) > 1000:
+            return img_res.content
+    except Exception as e:
+        print("Image download error:", e)
+    return None
+
+
+def send_telegram_post(bot_token, chat_id, caption, button_text, img_bytes, aff_link):
     base_url = f"https://api.telegram.org/bot{bot_token}"
     reply_markup = json.dumps({
         "inline_keyboard": [[{"text": button_text, "url": aff_link}]]
     })
 
-    if image_url and image_url.startswith("http"):
+    if img_bytes:
         try:
-            img_res = requests.get(
-                image_url,
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=12,
-            )
-            if img_res.status_code == 200 and len(img_res.content) > 1000:
-                res = requests.post(
-                    f"{base_url}/sendPhoto",
-                    data={
-                        "chat_id": chat_id,
-                        "caption": caption,
-                        "parse_mode": "HTML",
-                        "reply_markup": reply_markup,
-                    },
-                    files={"photo": ("deal.jpg", img_res.content, "image/jpeg")},
-                    timeout=20,
-                ).json()
-                if res.get("ok"):
-                    return True
+            res = requests.post(
+                f"{base_url}/sendPhoto",
+                data={
+                    "chat_id": chat_id,
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                    "reply_markup": reply_markup,
+                },
+                files={"photo": ("deal.jpg", img_bytes, "image/jpeg")},
+                timeout=20,
+            ).json()
+            if res.get("ok"):
+                return True
         except Exception as e:
-            print("Image upload fallback:", e)
+            print("Telegram photo upload fallback:", e)
 
     res = requests.post(
         f"{base_url}/sendMessage",
@@ -155,6 +175,68 @@ def send_telegram_post(bot_token, chat_id, caption, button_text, image_url, aff_
     if not res.get("ok"):
         raise RuntimeError(f"Telegram API Error: {res}")
     return True
+
+
+def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_url, aff_link):
+    if not page_id or not access_token:
+        print("Facebook Secrets (FB_PAGE_ID / FB_ACCESS_TOKEN) not set. Skipping FB.")
+        return
+
+    try:
+        graph_base = f"https://graph.facebook.com/v20.0/{page_id}"
+        post_id = ""
+
+        if img_bytes:
+            res = requests.post(
+                f"{graph_base}/photos",
+                data={
+                    "caption": fb_caption,
+                    "access_token": access_token,
+                },
+                files={"source": ("deal.jpg", img_bytes, "image/jpeg")},
+                timeout=25,
+            ).json()
+            post_id = res.get("post_id") or res.get("id") or ""
+            if not post_id:
+                print("FB binary photo upload response:", res)
+
+        if not post_id and image_url and image_url.startswith("http"):
+            res = requests.post(
+                f"{graph_base}/photos",
+                data={
+                    "url": image_url,
+                    "caption": fb_caption,
+                    "access_token": access_token,
+                },
+                timeout=20,
+            ).json()
+            post_id = res.get("post_id") or res.get("id") or ""
+
+        if not post_id:
+            res = requests.post(
+                f"{graph_base}/feed",
+                data={
+                    "message": fb_caption,
+                    "access_token": access_token,
+                },
+                timeout=20,
+            ).json()
+            post_id = res.get("id") or ""
+
+        if post_id:
+            c_res = requests.post(
+                f"https://graph.facebook.com/v20.0/{post_id}/comments",
+                data={
+                    "message": f"🛒 সরাসরি দারাজ থেকে অফার প্রাইসে অর্ডার করুন 👇\n{aff_link}",
+                    "access_token": access_token,
+                },
+                timeout=15,
+            ).json()
+            print(f"Successfully posted to Facebook Page (Post ID: {post_id}, Comment: {c_res.get('id')})")
+        else:
+            print(f"Facebook post failed: {res}")
+    except Exception as e:
+        print(f"Facebook posting error: {e}")
 
 
 def main():
@@ -203,10 +285,18 @@ def main():
 
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "")
     aff_link = build_clean_affiliate_link(raw_aff_link, tracking_param)
-    caption, button_text = build_human_style_post(title, orig_price, disc_price, disc_pct, rating)
+    tg_caption, button_text, fb_caption = build_human_style_post(
+        title, orig_price, disc_price, disc_pct, rating
+    )
 
-    send_telegram_post(bot_token, chat_id, caption, button_text, image_url, aff_link)
-    print(f"Successfully posted natural deal to {chat_id}: {title}")
+    img_bytes = download_image_bytes(image_url)
+
+    send_telegram_post(bot_token, chat_id, tg_caption, button_text, img_bytes, aff_link)
+    print(f"Successfully posted natural deal to Telegram {chat_id}: {title}")
+
+    fb_page_id = os.environ.get("FB_PAGE_ID", "").strip()
+    fb_token = os.environ.get("FB_ACCESS_TOKEN", "").strip()
+    post_to_facebook_page(fb_page_id, fb_token, fb_caption, img_bytes, image_url, aff_link)
 
     bd_time = datetime.now(timezone(timedelta(hours=6))).strftime("%Y-%m-%d %H:%M:%S")
     history_ws.append_row([pid, title, orig_price, disc_price, disc_pct, rating, image_url, aff_link, bd_time])
