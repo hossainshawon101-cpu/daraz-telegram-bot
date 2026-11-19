@@ -14,22 +14,18 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# High-Converting Budget (Under 850 Tk), Kop Offers & Daily Needed Queries
 KOP_AND_DAILY_QUERIES = [
-    # Viral Kop Offers & Budget Deals
     "11 tk deal daraz",
     "mystery box daraz offer",
     "flash sale under 99 tk",
     "free gift combo offer daraz",
     "cheapest daily gadget under 199",
     "mega discount deal under 299",
-    # Daily Personal Care & Grooming
     "DarazMall face wash discount",
     "Official Store shampoo offer",
     "authentic sunscreen lotion deal",
     "DarazMall body spray perfume",
     "Official Store trimmer best seller",
-    # Daily Kitchen & Home Essentials
     "insulated water bottle flask deal",
     "airtight food storage box set",
     "microfiber floor mop cleaning deal",
@@ -37,7 +33,6 @@ KOP_AND_DAILY_QUERIES = [
     "cotton bedsheet pillow cover offer",
     "kitchen rack organizer best seller",
     "electric kettle DarazMall offer",
-    # Daily Grocery, Tech & Fashion
     "pure sundarban honey offer",
     "green tea coffee jar discount",
     "fast charging cable adapter DarazMall",
@@ -103,7 +98,7 @@ def fetch_via_proxy(target_url):
         r = requests.get(
             f"https://r.jina.ai/{target_url}",
             headers={"Accept": "text/plain"},
-            timeout=12,
+            timeout=14,
         )
         if r.status_code == 200 and len(r.text) > 300:
             return r.text
@@ -112,7 +107,7 @@ def fetch_via_proxy(target_url):
 
     try:
         encoded = urllib.parse.quote(target_url, safe="")
-        r2 = requests.get(f"https://api.allorigins.win/raw?url={encoded}", timeout=12)
+        r2 = requests.get(f"https://api.allorigins.win/raw?url={encoded}", timeout=14)
         if r2.status_code == 200 and len(r2.text) > 300:
             return r2.text
     except Exception:
@@ -240,7 +235,7 @@ def scrape_product_page(url, is_manual=False):
         review_count = 0
 
         try:
-            res = requests.get(fetch_target, headers=HEADERS, allow_redirects=True, timeout=10)
+            res = requests.get(fetch_target, headers=HEADERS, allow_redirects=True, timeout=12)
             if res.status_code == 200:
                 if is_short and "-i" in res.url:
                     m_p = re.search(r"-i(\d+)", res.url)
@@ -255,7 +250,7 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0 or original_price <= discount_price:
             try:
                 p_url = f"https://api.allorigins.win/raw?url={urllib.parse.quote(fetch_target, safe='')}"
-                p_res = requests.get(p_url, timeout=12)
+                p_res = requests.get(p_url, timeout=14)
                 if p_res.status_code == 200:
                     t2, img2, dp2, op2, r2, off2, rev2 = parse_html_product(p_res.text)
                     if is_valid_and_authentic_title(t2):
@@ -273,7 +268,7 @@ def scrape_product_page(url, is_manual=False):
             except Exception:
                 pass
 
-        if not is_valid_and_authentic_title(title) or discount_price <= 0 or review_count < 20:
+        if not is_valid_and_authentic_title(title) or discount_price <= 0 or original_price <= discount_price:
             j_text = fetch_via_proxy(fetch_target)
             if j_text and "error 403" not in j_text.lower() and "target url returned error" not in j_text.lower():
                 off3, rev3 = check_authenticity_signals(j_text)
@@ -317,13 +312,10 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0:
             return None
 
-        # High-Converting Budget + Social Proof Filter (Max 850 Tk, 4.5+ Rating, 20+ Reviews)
         if not is_manual:
-            if discount_price > 850:
+            if discount_price > 1250:
                 return None
-            if rating > 0 and rating < 4.5:
-                return None
-            if review_count < 20:
+            if rating > 0 and rating < 4.3:
                 return None
 
         if rating <= 0:
@@ -351,6 +343,7 @@ def scrape_product_page(url, is_manual=False):
             "discount_price": int(discount_price),
             "discount_percent": f"{discount_percent}%",
             "disc_val": int(discount_percent),
+            "review_count": review_count,
             "rating": rating,
             "is_official": is_official,
             "image_url": image_url,
@@ -402,7 +395,7 @@ def fetch_sitemap_links():
                     else r2.text
                 )
                 urls.extend(extract_daraz_links(st))
-                if len(urls) >= 15:
+                if len(urls) >= 25:
                     break
     except Exception:
         pass
@@ -411,29 +404,30 @@ def fetch_sitemap_links():
 
 def discover_kop_and_daily_offers():
     urls = []
-    chosen_queries = random.sample(KOP_AND_DAILY_QUERIES, 2)
+    chosen_queries = random.sample(KOP_AND_DAILY_QUERIES, 4)
     for q_text in chosen_queries:
         print(f"Hunting High-Selling 40%+ deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         search_urls = [
             f"https://html.duckduckgo.com/html/?q={q}",
             f"https://search.brave.com/search?q={q}",
+            f"https://www.bing.com/search?q={q}",
         ]
         for s_url in search_urls:
             content = fetch_via_proxy(s_url)
             for u in extract_daraz_links(content):
                 if u not in urls:
                     urls.append(u)
-            if len(urls) >= 10:
+            if len(urls) >= 20:
                 break
 
-    if len(urls) < 4:
+    if len(urls) < 10:
         for u in fetch_sitemap_links():
             if u not in urls:
                 urls.append(u)
 
     random.shuffle(urls)
-    return urls[:10]
+    return urls[:20]
 
 
 def main():
@@ -468,7 +462,7 @@ def main():
             continue
 
         disc_num = int(re.sub(r"[^\d]", "", disc_cell) or 0)
-        if disc_num < 40:
+        if disc_num < 40 and "s.daraz.com.bd" not in link_cell:
             queue_ws.delete_rows(idx)
         elif row[0]:
             existing_ids.add(row[0].strip())
@@ -478,43 +472,4 @@ def main():
         print(f"Queue already has {current_queue} verified high-converting deals.")
         return
 
-    product_urls = discover_kop_and_daily_offers()
-    tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
-
-    valid_deals = []
-    for p_url in product_urls:
-        info = scrape_product_page(p_url, is_manual=False)
-        if not info or info["pid"] in existing_ids:
-            continue
-        existing_ids.add(info["pid"])
-        valid_deals.append(info)
-        if len(valid_deals) >= 5:
-            break
-
-    valid_deals.sort(key=lambda x: (x["is_official"], x["disc_val"]), reverse=True)
-
-    added = 0
-    for info in valid_deals[:3]:
-        aff_link = (
-            info["clean_url"]
-            if "s.daraz.com.bd" in info["clean_url"] or not tracking_param
-            else f"{info['clean_url']}?{tracking_param}"
-        )
-        queue_ws.append_row([
-            info["pid"],
-            info["title"],
-            info["original_price"],
-            info["discount_price"],
-            info["discount_percent"],
-            info["rating"],
-            info["image_url"],
-            aff_link,
-        ])
-        added += 1
-        print(f"Added High-Converting Deal ({info['discount_percent']} OFF, ৳{info['discount_price']}): {info['title']}")
-
-    print(f"Finished. Added {added} verified budget & high-review deals.")
-
-
-if __name__ == "__main__":
-    main()
+    product
