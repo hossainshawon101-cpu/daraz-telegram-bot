@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import json
 import html
 import random
@@ -185,6 +186,7 @@ def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_ur
     try:
         graph_base = f"https://graph.facebook.com/v20.0/{page_id}"
         post_id = ""
+        photo_id = ""
 
         if img_bytes:
             res = requests.post(
@@ -196,11 +198,10 @@ def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_ur
                 files={"source": ("deal.jpg", img_bytes, "image/jpeg")},
                 timeout=25,
             ).json()
-            post_id = res.get("post_id") or res.get("id") or ""
-            if not post_id:
-                print("FB binary photo upload response:", res)
+            post_id = res.get("post_id") or ""
+            photo_id = res.get("id") or ""
 
-        if not post_id and image_url and image_url.startswith("http"):
+        if not post_id and not photo_id and image_url and image_url.startswith("http"):
             res = requests.post(
                 f"{graph_base}/photos",
                 data={
@@ -210,9 +211,10 @@ def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_ur
                 },
                 timeout=20,
             ).json()
-            post_id = res.get("post_id") or res.get("id") or ""
+            post_id = res.get("post_id") or ""
+            photo_id = res.get("id") or ""
 
-        if not post_id:
+        if not post_id and not photo_id:
             res = requests.post(
                 f"{graph_base}/feed",
                 data={
@@ -223,16 +225,44 @@ def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_ur
             ).json()
             post_id = res.get("id") or ""
 
-        if post_id:
-            c_res = requests.post(
-                f"https://graph.facebook.com/v20.0/{post_id}/comments",
-                data={
-                    "message": f"🛒 সরাসরি দারাজ থেকে অফার প্রাইসে অর্ডার করুন 👇\n{aff_link}",
-                    "access_token": access_token,
-                },
-                timeout=15,
-            ).json()
-            print(f"Successfully posted to Facebook Page (Post ID: {post_id}, Comment: {c_res.get('id')})")
+        target_ids = [tid for tid in [post_id, photo_id] if tid]
+        if target_ids:
+            time.sleep(3)
+            comment_id = ""
+            comment_msg = f"🛒 সরাসরি দারাজ থেকে অফার প্রাইসে অর্ডার করুন 👇\n{aff_link}"
+
+            for tid in target_ids:
+                c_res = requests.post(
+                    f"https://graph.facebook.com/v20.0/{tid}/comments",
+                    data={
+                        "message": comment_msg,
+                        "access_token": access_token,
+                    },
+                    timeout=15,
+                ).json()
+                if c_res.get("id"):
+                    comment_id = c_res["id"]
+                    break
+                else:
+                    print(f"FB Comment attempt on {tid} failed:", c_res)
+
+            # কমেন্ট ব্লক হলে পোস্টের ক্যাপশনেই লিংক আপডেট করে দেওয়া (Smart Fallback)
+            if not comment_id:
+                fallback_caption = fb_caption.replace(
+                    "👇 সরাসরি দারাজ থেকে অর্ডার করার লিংক প্রথম কমেন্টে (First Comment) দেওয়া আছে!",
+                    f"🛒 সরাসরি দারাজ থেকে অর্ডার করুন 👇\n{aff_link}",
+                )
+                requests.post(
+                    f"https://graph.facebook.com/v20.0/{target_ids[0]}",
+                    data={
+                        "message": fallback_caption,
+                        "access_token": access_token,
+                    },
+                    timeout=15,
+                )
+                print(f"FB Post updated with direct link fallback (Post ID: {target_ids[0]})")
+            else:
+                print(f"Successfully posted to Facebook Page (Post ID: {target_ids[0]}, Comment ID: {comment_id})")
         else:
             print(f"Facebook post failed: {res}")
     except Exception as e:
