@@ -472,4 +472,43 @@ def main():
         print(f"Queue already has {current_queue} verified high-converting deals.")
         return
 
-    product
+    product_urls = discover_kop_and_daily_offers()
+    tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
+
+    valid_deals = []
+    for p_url in product_urls:
+        info = scrape_product_page(p_url, is_manual=False)
+        if not info or info["pid"] in existing_ids:
+            continue
+        existing_ids.add(info["pid"])
+        valid_deals.append(info)
+        if len(valid_deals) >= 6:
+            break
+
+    valid_deals.sort(key=lambda x: (x["is_official"], x["review_count"], x["disc_val"]), reverse=True)
+
+    added = 0
+    for info in valid_deals[:4]:
+        aff_link = (
+            info["clean_url"]
+            if "s.daraz.com.bd" in info["clean_url"] or not tracking_param
+            else f"{info['clean_url']}?{tracking_param}"
+        )
+        queue_ws.append_row([
+            info["pid"],
+            info["title"],
+            info["original_price"],
+            info["discount_price"],
+            info["discount_percent"],
+            info["rating"],
+            info["image_url"],
+            aff_link,
+        ])
+        added += 1
+        print(f"Added High-Converting Deal ({info['discount_percent']} OFF, ৳{info['discount_price']}): {info['title']}")
+
+    print(f"Finished. Added {added} verified budget & high-review deals.")
+
+
+if __name__ == "__main__":
+    main()
