@@ -64,7 +64,6 @@ def build_human_style_post(title, orig_price, disc_price, disc_pct, rating):
     safe_title = html.escape(title)
     raw_rating = str(rating)
 
-    # স্পেশাল অফার ট্যাগ আলাদা করা (Buy 1 Get 1 / Mystery Box / Free Delivery)
     offer_badge = "🔥 কোপ অফার"
     if "buy 1 get 1" in raw_rating.lower() or "buy 1 get 1" in title.lower():
         offer_badge = "🎁 BUY 1 GET 1 FREE অফার"
@@ -180,4 +179,87 @@ def send_telegram_post(bot_token, chat_id, caption, button_text, img_bytes, aff_
             if res.get("ok"):
                 return True
         except Exception as e:
-            print("
+            print("Telegram photo upload fallback:", e)
+
+    res = requests.post(
+        f"{base_url}/sendMessage",
+        data={
+            "chat_id": chat_id,
+            "text": caption,
+            "parse_mode": "HTML",
+            "reply_markup": reply_markup,
+            "disable_web_page_preview": True,
+        },
+        timeout=15,
+    ).json()
+    if not res.get("ok"):
+        raise RuntimeError(f"Telegram API Error: {res}")
+    return True
+
+
+def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_url, aff_link):
+    if not page_id or not access_token:
+        print("Facebook Secrets not set. Skipping FB.")
+        return
+
+    try:
+        graph_base = f"https://graph.facebook.com/v20.0/{page_id}"
+        post_id = ""
+        photo_id = ""
+
+        if img_bytes:
+            res = requests.post(
+                f"{graph_base}/photos",
+                data={
+                    "caption": fb_caption,
+                    "access_token": access_token,
+                },
+                files={"source": ("deal.jpg", img_bytes, "image/jpeg")},
+                timeout=25,
+            ).json()
+            post_id = res.get("post_id") or ""
+            photo_id = res.get("id") or ""
+
+        if not post_id and not photo_id and image_url and image_url.startswith("http"):
+            res = requests.post(
+                f"{graph_base}/photos",
+                data={
+                    "url": image_url,
+                    "caption": fb_caption,
+                    "access_token": access_token,
+                },
+                timeout=20,
+            ).json()
+            post_id = res.get("post_id") or ""
+            photo_id = res.get("id") or ""
+
+        if not post_id and not photo_id:
+            res = requests.post(
+                f"{graph_base}/feed",
+                data={
+                    "message": fb_caption,
+                    "access_token": access_token,
+                },
+                timeout=20,
+            ).json()
+            post_id = res.get("id") or ""
+
+        target_ids = [tid for tid in [post_id, photo_id] if tid]
+        if target_ids:
+            time.sleep(3)
+            comment_id = ""
+            comment_msg = f"✅ সরাসরি দারাজ থেকে কেনার লিংক 👇\n{aff_link}"
+
+            for tid in target_ids:
+                c_res = requests.post(
+                    f"https://graph.facebook.com/v20.0/{tid}/comments",
+                    data={
+                        "message": comment_msg,
+                        "access_token": access_token,
+                    },
+                    timeout=15,
+                ).json()
+                if c_res.get("id"):
+                    comment_id = c_res["id"]
+                    break
+                else:
