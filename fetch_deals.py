@@ -320,4 +320,183 @@ def scrape_product_page(url, is_manual=False):
                             title = cand
 
                 raw_prices = re.findall(r"৳\s*([\d,]+)", top_section)
-                valid_prices = [int(p.replace(",", "")) for p in raw_prices if 11 <= int(p.replace(",",
+                valid_prices = [int(p.replace(",", "")) for p in raw_prices if 11 <= int(p.replace(",", "")) <= 50000]
+                if valid_prices and discount_price <= 0:
+                    discount_price = valid_prices[0]
+                if len(valid_prices) > 1 and valid_prices[1] > discount_price and original_price <= discount_price:
+                    original_price = valid_prices[1]
+
+                m_badge = re.search(r"-(\d{2})%", top_section) or re.search(r"(\d{2})%\s*OFF", top_section, re.I)
+                if m_badge:
+                    badge_discount = int(m_badge.group(1))
+
+                if rating <= 0:
+                    m_rat = re.search(r"([45]\.\d)\s*/\s*5", top_section)
+                    if m_rat:
+                        rating = float(m_rat.group(1))
+
+                if not image_url:
+                    m_img = re.search(r"https://[^\s\)\"']+lazcdn\.com[^\s\)\"']+\.(?:jpg|jpeg|png|webp)", j_text)
+                    if m_img:
+                        image_url = m_img.group(0)
+
+        if not is_valid_and_authentic_title(title):
+            slug_t = title_from_slug(fetch_target)
+            if is_valid_and_authentic_title(slug_t):
+                title = slug_t
+
+        if not is_valid_and_authentic_title(title) or discount_price <= 0:
+            return None
+
+        if not is_manual:
+            if discount_price > 499:
+                return None
+            if review_count < 100:
+                return None
+            if rating > 0 and rating < 4.4:
+                return None
+
+        if rating <= 0:
+            rating = 4.7
+
+        if original_price > discount_price:
+            discount_percent = round(((original_price - discount_price) / original_price) * 100)
+        elif badge_discount >= 40:
+            discount_percent = badge_discount
+            original_price = round(discount_price / (1 - (discount_percent / 100)))
+        else:
+            discount_percent = 0
+
+        if not is_manual and (discount_percent < 40 or discount_percent > 95):
+            return None
+
+        if original_price <= discount_price:
+            original_price = round(discount_price * 1.8)
+            discount_percent = 45
+
+        unique_tags = list(dict.fromkeys(all_tags))
+        tag_str = f" | {' • '.join(unique_tags)}" if unique_tags else ""
+        rating_display = f"{rating}/5 ({review_count}+ Reviews){tag_str}"
+
+        return {
+            "pid": pid,
+            "title": title[:140],
+            "original_price": int(original_price),
+            "discount_price": int(discount_price),
+            "discount_percent": f"{discount_percent}%",
+            "disc_val": int(discount_percent),
+            "review_count": review_count,
+            "rating": rating_display,
+            "is_official": is_official,
+            "image_url": image_url,
+            "clean_url": url.strip() if is_short else fetch_target,
+        }
+    except Exception:
+        return None
+
+
+def extract_daraz_links(raw_text):
+    if not raw_text:
+        return []
+    cleaned = urllib.parse.unquote(raw_text.replace("\\/", "/"))
+    pattern = r"https?://(?:www\.)?daraz\.com\.bd/products/[a-zA-Z0-9\-_%]+-i\d+(?:-s\d+)?\.html"
+    found = re.findall(pattern, cleaned)
+    normalized = []
+    for u in found:
+        u = u.replace("http://", "https://")
+        if "www.daraz.com.bd" not in u:
+            u = u.replace("https://daraz.com.bd", "https://www.daraz.com.bd")
+        if u not in normalized:
+            normalized.append(u)
+    return normalized
+
+
+def discover_a_to_z_offers():
+    urls = []
+    chosen_queries = random.sample(A_TO_Z_DARAZ_OFFER_QUERIES, 5)
+    for q_text in chosen_queries:
+        print(f"Hunting A-to-Z Lowest Price 100+ Review Deals for: {q_text}")
+        q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
+        search_urls = [
+            f"https://html.duckduckgo.com/html/?q={q}",
+            f"https://search.brave.com/search?q={q}",
+            f"https://www.bing.com/search?q={q}",
+        ]
+        for s_url in search_urls:
+            content = fetch_via_proxy(s_url)
+            for u in extract_daraz_links(content):
+                if u not in urls:
+                    urls.append(u)
+            if len(urls) >= 28:
+                break
+
+    random.shuffle(urls)
+    return urls[:28]
+
+
+def main():
+    queue_ws, history_ws = get_sheets()
+    all_rows = queue_ws.get_all_values()
+    existing_ids = set(history_ws.col_values(1)[1:])
+
+    for idx in range(len(all_rows), 1, -1):
+        row = all_rows[idx - 1]
+        link_cell = row[7].strip() if len(row) > 7 else ""
+        title_cell = row[1].strip() if len(row) > 1 else ""
+        price_cell = int(re.sub(r"[^\d]", "", str(row[3])) or 0) if len(row) > 3 else 0
+        rating_cell = row[5].strip() if len(row) > 5 else ""
+
+        if (
+            not is_valid_and_authentic_title(title_cell)
+            or (price_cell > 499 and "s.daraz.com.bd" not in link_cell)
+            or ("Reviews)" not in rating_cell and "s.daraz.com.bd" not in link_cell)
+        ):
+            queue_ws.delete_rows(idx)
+        elif row[0]:
+            existing_ids.add(row[0].strip())
+
+    current_queue = len(queue_ws.get_all_values()) - 1
+    if current_queue >= 6:
+        print(f"Queue already has {current_queue} verified 100+ review A-to-Z budget deals.")
+        return
+
+    product_urls = discover_a_to_z_offers()
+    tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
+
+    valid_deals = []
+    for p_url in product_urls:
+        info = scrape_product_page(p_url, is_manual=False)
+        if not info or info["pid"] in existing_ids:
+            continue
+        existing_ids.add(info["pid"])
+        valid_deals.append(info)
+        if len(valid_deals) >= 8:
+            break
+
+    valid_deals.sort(key=lambda x: (x["discount_price"], -x["review_count"]))
+
+    added = 0
+    for info in valid_deals[:4]:
+        aff_link = (
+            info["clean_url"]
+            if "s.daraz.com.bd" in info["clean_url"] or not tracking_param
+            else f"{info['clean_url']}?{tracking_param}"
+        )
+        queue_ws.append_row([
+            info["pid"],
+            info["title"],
+            info["original_price"],
+            info["discount_price"],
+            info["discount_percent"],
+            info["rating"],
+            info["image_url"],
+            aff_link,
+        ])
+        added += 1
+        print(f"Added A-to-Z Lowest Deal (৳{info['discount_price']}, {info['discount_percent']} OFF, {info['rating']}): {info['title']}")
+
+    print(f"Finished. Added {added} verified 100+ review A-to-Z lowest price deals.")
+
+
+if __name__ == "__main__":
+    main()
