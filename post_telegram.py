@@ -62,61 +62,56 @@ def build_clean_affiliate_link(raw_url, tracking_param):
 
 def build_human_style_post(title, orig_price, disc_price, disc_pct, rating):
     safe_title = html.escape(title)
+    rating_text = str(rating) if "/" in str(rating) else f"{rating}/5 (100+ Verified Reviews)"
     try:
         saved_amount = max(0, int(float(orig_price)) - int(float(disc_price)))
     except Exception:
         saved_amount = 0
 
-    save_line = f" (সাশ্রয় হচ্ছে ৳{saved_amount}!)" if saved_amount >= 50 else ""
+    save_line = f" (সাশ্রয় ৳{saved_amount}!)" if saved_amount >= 30 else ""
 
     templates = [
         (
-            f"🔥 <b>আজকের সেরা ডিল: {safe_title}</b>\n\n"
-            f"নিত্যদিনের প্রয়োজনে দারুণ একটি কালেকশন এখন বিশাল ছাড়ে পাওয়া যাচ্ছে!\n\n"
-            f"💸 <b>অফার প্রাইস:</b> ৳{disc_price} <s>৳{orig_price}</s>{save_line}\n"
-            f"🏷️ <b>ডিসকাউন্ট:</b> {disc_pct} OFF\n"
-            f"⭐ <b>কাস্টমার রেটিং:</b> {rating}/5 (১০০% অরিজিনাল)\n\n"
-            f"স্টক শেষ হওয়ার আগেই নিচের বাটন থেকে দেখে নিন 👇"
-        ),
-        (
-            f"⚡ <b>ফ্ল্যাশ অফার অ্যালার্ট! ({disc_pct} ছাড়)</b>\n\n"
+            f"💥 <b>মাত্র ৳{disc_price} টাকায় কোপ ডিল! ({disc_pct} OFF)</b>\n\n"
             f"📦 <b>{safe_title}</b>\n\n"
-            f"আগের দাম <s>৳{orig_price}</s> টাকা হলেও এখন পাচ্ছেন মাত্র <b>৳{disc_price} টাকায়</b>{save_line}।\n"
-            f"✅ ভেরিফায়েড সেলার ও {rating}/5 রিভিউ স্কোর।\n\n"
-            f"সরাসরি দারাজ থেকে অর্ডার করতে নিচে চাপুন 👇"
+            f"💸 <b>অফার প্রাইস:</b> ৳{disc_price} <s>৳{orig_price}</s>{save_line}\n"
+            f"⭐ <b>ভেরিফায়েড রেটিং:</b> {rating_text}\n"
+            f"🚚 <b>টিপস:</b> Choice-এর আরও ২টি পণ্যের সাথে নিলে ফ্রি ডেলিভারি!\n\n"
+            f"✅ কেনার জন্য নিচের বাটনে চাপুন 👇"
         ),
         (
-            f"🛍️ <b>বাজেটের মধ্যে দারুণ অফার — {disc_pct} OFF!</b>\n\n"
-            f"✨ {safe_title}\n\n"
+            f"🔥 <b>লোয়েস্ট প্রাইস অ্যালার্ট — মাত্র ৳{disc_price}!</b>\n\n"
+            f"✨ <b>{safe_title}</b>\n\n"
+            f"🏷️ আগের দাম <s>৳{orig_price}</s> হলেও এখন পাচ্ছেন <b>{disc_pct} ছাড়ে</b> মাত্র <b>৳{disc_price} টাকায়</b>{save_line}।\n"
+            f"🌟 <b>কাস্টমার রিভিউ:</b> {rating_text}\n\n"
+            f"স্টক শেষ হওয়ার আগেই লুফে নিন 👇"
+        ),
+        (
+            f"⚡ <b>বাজেট কোপ অফার ({disc_pct} ছাড়)!</b>\n\n"
+            f"🛍️ {safe_title}\n\n"
             f"💰 <b>ডিসকাউন্ট মূল্য:</b> ৳{disc_price} (রেগুলার <s>৳{orig_price}</s>)\n"
-            f"🌟 <b>রেটিং:</b> {rating}/5 | অরিজিনাল প্রোডাক্ট\n\n"
-            f"অফারটি সীমিত সময়ের জন্য, এখনই চেক করুন 👇"
-        ),
-        (
-            f"💥 <b>মেগা সেভিংস ডিল!</b>\n\n"
-            f"<b>{safe_title}</b>\n\n"
-            f"এখন কিনলে সরাসরি <b>{disc_pct} ছাড়</b> পাচ্ছেন! অফার প্রাইস মাত্র <b>৳{disc_price}</b> (আগের দাম <s>৳{orig_price}</s>){save_line}।\n"
-            f"🛡️ কোয়ালিটি চেকড ও টপ-রেটেড ({rating}/5)।\n\n"
-            f"নিচের বাটনে ক্লিক করে অর্ডার কনফার্ম করুন 👇"
+            f"✅ <b>রিভিউ স্কোর:</b> {rating_text}\n"
+            f"🚚 একসাথে ৩টি Choice পণ্য অর্ডার করলে ডেলিভারি চার্জ ফ্রি!\n\n"
+            f"সরাসরি দারাজ থেকে অর্ডার করতে নিচে ক্লিক করুন 👇"
         ),
     ]
 
     button_labels = [
-        "🛒 অর্ডার করুন দারাজে",
-        "🔥 ডিলটি লুফে নিন",
+        f"🛒 মাত্র ৳{disc_price}-এ অর্ডার করুন",
+        "🔥 কোপ ডিলটি লুফে নিন",
         "🛍️ অফার প্রাইসে কিনুন",
         "⚡ এখনই দারাজে দেখুন",
-        "🛒 Order Now on Daraz",
     ]
 
     fb_caption = (
-        f"🔥 আজকের কোপ অফার ({disc_pct} OFF)!\n\n"
+        f"💥 মাত্র ৳{disc_price} টাকায় দারাজ কোপ অফার ({disc_pct} OFF)!\n\n"
         f"📦 {title}\n\n"
         f"💸 অফার প্রাইস: মাত্র ৳{disc_price} টাকা (আগের দাম ৳{orig_price}){save_line}\n"
-        f"⭐ কাস্টমার রেটিং: {rating}/5 | ১০০% অরিজিনাল প্রোডাক্ট\n\n"
-        f"👇 সরাসরি দারাজ থেকে অর্ডার করার লিংক প্রথম কমেন্টে (First Comment) দেওয়া আছে!\n"
-        f"📢 আরও মেগা ডিল পেতে আমাদের Telegram Channel-এ জয়েন করুন: https://t.me/newarea101\n\n"
-        f"#DarazOffer #BestDealsBD #OnlineShoppingBD #FlashSale"
+        f"⭐ ভেরিফায়েড রেটিং: {rating_text}\n"
+        f"🚚 টিপস: Choice-এর আরও ২টি পণ্যের সাথে একসাথে নিলে ফ্রি ডেলিভারি পাবেন!\n\n"
+        f"👇 সরাসরি দারাজ থেকে কেনার লিংক প্রথম কমেন্টে (First Comment) দেওয়া আছে!\n"
+        f"📢 আরও লোয়েস্ট প্রাইস ডিল পেতে Telegram Channel-এ জয়েন করুন: https://t.me/newarea101\n\n"
+        f"#DarazKopOffer #BestDealsBD #DarazChoice #LowestPriceBD"
     )
 
     return random.choice(templates), random.choice(button_labels), fb_caption
@@ -229,7 +224,7 @@ def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_ur
         if target_ids:
             time.sleep(3)
             comment_id = ""
-            comment_msg = f"🛒 সরাসরি দারাজ থেকে অফার প্রাইসে অর্ডার করুন 👇\n{aff_link}"
+            comment_msg = f"✅ সরাসরি দারাজ থেকে কেনার লিংক 👇\n{aff_link}"
 
             for tid in target_ids:
                 c_res = requests.post(
@@ -246,11 +241,10 @@ def post_to_facebook_page(page_id, access_token, fb_caption, img_bytes, image_ur
                 else:
                     print(f"FB Comment attempt on {tid} failed:", c_res)
 
-            # কমেন্ট ব্লক হলে পোস্টের ক্যাপশনেই লিংক আপডেট করে দেওয়া (Smart Fallback)
             if not comment_id:
                 fallback_caption = fb_caption.replace(
-                    "👇 সরাসরি দারাজ থেকে অর্ডার করার লিংক প্রথম কমেন্টে (First Comment) দেওয়া আছে!",
-                    f"🛒 সরাসরি দারাজ থেকে অর্ডার করুন 👇\n{aff_link}",
+                    "👇 সরাসরি দারাজ থেকে কেনার লিংক প্রথম কমেন্টে (First Comment) দেওয়া আছে!",
+                    f"✅ সরাসরি দারাজ থেকে কেনার লিংক 👇\n{aff_link}",
                 )
                 requests.post(
                     f"https://graph.facebook.com/v20.0/{target_ids[0]}",
@@ -298,18 +292,12 @@ def main():
     orig_price = row[2] if len(row) > 2 else ""
     disc_price = row[3] if len(row) > 3 else ""
     disc_pct = row[4] if len(row) > 4 else ""
-    rating = row[5] if len(row) > 5 else "4.7"
+    rating = row[5] if len(row) > 5 else "4.7/5 (100+ Reviews)"
     image_url = row[6] if len(row) > 6 else ""
     raw_aff_link = row[7] if len(row) > 7 else ""
 
     if not title or len(title) < 6 or "error" in title.lower() or not raw_aff_link:
         print(f"Skipping invalid row: {title}")
-        queue_ws.delete_rows(2)
-        return
-
-    disc_num = int(re.sub(r"[^\d]", "", str(disc_pct)) or 0)
-    if disc_num < 40 and "s.daraz.com.bd" not in raw_aff_link:
-        print(f"Skipping deal under 40% ({disc_pct}): {title}")
         queue_ws.delete_rows(2)
         return
 
@@ -322,7 +310,7 @@ def main():
     img_bytes = download_image_bytes(image_url)
 
     send_telegram_post(bot_token, chat_id, tg_caption, button_text, img_bytes, aff_link)
-    print(f"Successfully posted natural deal to Telegram {chat_id}: {title}")
+    print(f"Successfully posted 100+ review cheap deal to Telegram {chat_id}: {title}")
 
     fb_page_id = os.environ.get("FB_PAGE_ID", "").strip()
     fb_token = os.environ.get("FB_ACCESS_TOKEN", "").strip()
