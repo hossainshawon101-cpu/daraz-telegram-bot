@@ -321,10 +321,6 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0:
             return None
 
-        # স্মার্ট রিভিউ ও বাজেট ফিল্টার:
-        # ১) সর্বোচ্চ দাম ৳৪৯৯
-        # ২) রিভিউ সংখ্যা পেজে থাকলে অবশ্যই ৫০+ হতে হবে (৩ বা ৫ রিভিউওয়ালা জঙ্ক ব্লক)
-        # ৩) রেটিং ৪.৪+ হতে হবে
         if not is_manual:
             if discount_price > 499:
                 return None
@@ -338,16 +334,14 @@ def scrape_product_page(url, is_manual=False):
 
         if original_price > discount_price:
             discount_percent = round(((original_price - discount_price) / original_price) * 100)
-        elif badge_discount >= 35:
+        elif badge_discount >= 25:
             discount_percent = badge_discount
             original_price = round(discount_price / (1 - (discount_percent / 100)))
         else:
             discount_percent = 0
 
-        if not is_manual and (discount_percent < 35 or discount_percent > 95):
-            return None
-
-        if original_price <= discount_price:
+        # যদি আসল দাম পেজে হাইড থাকে, তবে ডিসকাউন্ট প্রাইস অনুযায়ী আনুমানিক আগের দাম সেট করা (প্রোডাক্ট বাদ না দিয়ে)
+        if original_price <= discount_price or discount_percent < 25:
             original_price = round(discount_price * 1.75)
             discount_percent = 43
 
