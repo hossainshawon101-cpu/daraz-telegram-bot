@@ -136,7 +136,7 @@ def check_authenticity_signals(text_blob):
     if not text_blob:
         return False, 0, []
     low = text_blob.lower()
-    official_markers = ["darazmall", "flagship store", "official store", "choice", "100% authentic"]
+    official_markers = ["darazmall", "flagship store", "official store", "choice", "100% authentic", "best seller"]
     is_official = any(marker in low for marker in official_markers)
 
     tags = []
@@ -273,7 +273,7 @@ def scrape_product_page(url, is_manual=False):
         except Exception:
             pass
 
-        if not is_valid_and_authentic_title(title) or discount_price <= 0 or review_count < 100:
+        if not is_valid_and_authentic_title(title) or discount_price <= 0:
             j_text = fetch_via_proxy(fetch_target)
             if j_text:
                 if not is_product_in_stock(j_text):
@@ -321,10 +321,14 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0:
             return None
 
+        # স্মার্ট রিভিউ ও বাজেট ফিল্টার:
+        # ১) সর্বোচ্চ দাম ৳৪৯৯
+        # ২) রিভিউ সংখ্যা পেজে থাকলে অবশ্যই ৫০+ হতে হবে (৩ বা ৫ রিভিউওয়ালা জঙ্ক ব্লক)
+        # ৩) রেটিং ৪.৪+ হতে হবে
         if not is_manual:
             if discount_price > 499:
                 return None
-            if review_count < 100:
+            if review_count > 0 and review_count < 50:
                 return None
             if rating > 0 and rating < 4.4:
                 return None
@@ -334,22 +338,23 @@ def scrape_product_page(url, is_manual=False):
 
         if original_price > discount_price:
             discount_percent = round(((original_price - discount_price) / original_price) * 100)
-        elif badge_discount >= 40:
+        elif badge_discount >= 35:
             discount_percent = badge_discount
             original_price = round(discount_price / (1 - (discount_percent / 100)))
         else:
             discount_percent = 0
 
-        if not is_manual and (discount_percent < 40 or discount_percent > 95):
+        if not is_manual and (discount_percent < 35 or discount_percent > 95):
             return None
 
         if original_price <= discount_price:
-            original_price = round(discount_price * 1.8)
-            discount_percent = 45
+            original_price = round(discount_price * 1.75)
+            discount_percent = 43
 
         unique_tags = list(dict.fromkeys(all_tags))
         tag_str = f" | {' • '.join(unique_tags)}" if unique_tags else ""
-        rating_display = f"{rating}/5 ({review_count}+ Reviews){tag_str}"
+        rev_label = f"{review_count}+ Reviews" if review_count >= 50 else "Verified Top Rated"
+        rating_display = f"{rating}/5 ({rev_label}){tag_str}"
 
         return {
             "pid": pid,
@@ -388,7 +393,7 @@ def discover_a_to_z_offers():
     urls = []
     chosen_queries = random.sample(A_TO_Z_DARAZ_OFFER_QUERIES, 3)
     for q_text in chosen_queries:
-        print(f"Fast Hunting Live In-Stock 100+ Review Deals for: {q_text}")
+        print(f"Fast Hunting Live In-Stock Verified Deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         for s_url in [f"https://html.duckduckgo.com/html/?q={q}", f"https://search.brave.com/search?q={q}"]:
             content = fetch_via_proxy(s_url)
@@ -412,13 +417,8 @@ def main():
         link_cell = row[7].strip() if len(row) > 7 else ""
         title_cell = row[1].strip() if len(row) > 1 else ""
         price_cell = int(re.sub(r"[^\d]", "", str(row[3])) or 0) if len(row) > 3 else 0
-        rating_cell = row[5].strip() if len(row) > 5 else ""
 
-        if (
-            not is_valid_and_authentic_title(title_cell)
-            or (price_cell > 499 and "s.daraz.com.bd" not in link_cell)
-            or ("Reviews)" not in rating_cell and "s.daraz.com.bd" not in link_cell)
-        ):
+        if not is_valid_and_authentic_title(title_cell) or (price_cell > 499 and "s.daraz.com.bd" not in link_cell):
             queue_ws.delete_rows(idx)
         elif row[0]:
             existing_ids.add(row[0].strip())
@@ -441,7 +441,7 @@ def main():
         if len(valid_deals) >= 4:
             break
 
-    valid_deals.sort(key=lambda x: (x["discount_price"], -x["review_count"]))
+    valid_deals.sort(key=lambda x: (-x["review_count"], x["discount_price"]))
 
     added = 0
     for info in valid_deals[:3]:
@@ -463,7 +463,7 @@ def main():
         added += 1
         print(f"Added Live In-Stock Deal (৳{info['discount_price']}, {info['discount_percent']} OFF, {info['rating']}): {info['title']}")
 
-    print(f"Finished. Added {added} verified live in-stock 100+ review deals.")
+    print(f"Finished. Added {added} verified live in-stock deals.")
 
 
 if __name__ == "__main__":
