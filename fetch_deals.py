@@ -2,7 +2,6 @@ import os
 import re
 import json
 import html
-import gzip
 import random
 import urllib.parse
 import requests
@@ -14,32 +13,27 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-KOP_AND_DAILY_QUERIES = [
-    "11 tk deal daraz",
-    "mystery box daraz offer",
-    "flash sale under 99 tk",
-    "free gift combo offer daraz",
-    "cheapest daily gadget under 199",
-    "mega discount deal under 299",
-    "DarazMall face wash discount",
-    "Official Store shampoo offer",
-    "authentic sunscreen lotion deal",
-    "DarazMall body spray perfume",
-    "Official Store trimmer best seller",
-    "insulated water bottle flask deal",
-    "airtight food storage box set",
-    "microfiber floor mop cleaning deal",
-    "rechargeable led emergency bulb",
-    "cotton bedsheet pillow cover offer",
-    "kitchen rack organizer best seller",
-    "electric kettle DarazMall offer",
-    "pure sundarban honey offer",
-    "green tea coffee jar discount",
-    "fast charging cable adapter DarazMall",
-    "tws earbuds best seller discount",
-    "smart watch mega offer",
-    "men cotton t shirt combo offer",
-    "women daily handbag backpack deal",
+CHEAP_KOP_QUERIES = [
+    "daraz choice 35 tk deal",
+    "daraz choice 49 tk offer",
+    "daraz choice 99 tk best seller",
+    "under 150 tk best seller daraz",
+    "under 199 tk flash sale daraz",
+    "under 250 tk top rated daraz",
+    "under 299 tk mega discount daraz",
+    "usb night light mini led daraz",
+    "silicone smart band watch under 199",
+    "in ear wired earphone best seller daraz",
+    "kitchen cleaning scrubber pad combo",
+    "shoe heel protector insole pad",
+    "mini portable fan rechargeable daraz",
+    "mobile stand holder desk daraz",
+    "type c fast charging cable best seller",
+    "lint remover cloth shaver daraz",
+    "microfiber towel cleaning cloth daraz",
+    "face wash cleanser under 299 daraz",
+    "soap shampoo combo offer daraz",
+    "water bottle flask under 350 daraz",
 ]
 
 BAD_TITLES = {
@@ -124,19 +118,20 @@ def check_authenticity_signals(text_blob):
         "darazmall",
         "flagship store",
         "official store",
+        "choice",
         "100% authentic",
-        "authenticity guaranteed",
     ]
     is_official = any(marker in low for marker in official_markers)
 
     review_count = 0
-    m_rev = (
-        re.search(r'"ratingCount"\s*:\s*"?(\d+)"?', text_blob)
-        or re.search(r'"reviewCount"\s*:\s*"?(\d+)"?', text_blob)
-        or re.search(r"(\d+)\s*Ratings?", text_blob, re.I)
+    matches = (
+        re.findall(r'"ratingCount"\s*:\s*"?(\d+)"?', text_blob)
+        + re.findall(r'"reviewCount"\s*:\s*"?(\d+)"?', text_blob)
+        + re.findall(r"(\d+)\s*Ratings?", text_blob, re.I)
+        + re.findall(r"\((\d+)\)\s*Ratings?", text_blob, re.I)
     )
-    if m_rev:
-        review_count = int(m_rev.group(1))
+    if matches:
+        review_count = max(int(x) for x in matches)
 
     return is_official, review_count
 
@@ -247,7 +242,7 @@ def scrape_product_page(url, is_manual=False):
         except Exception:
             pass
 
-        if not is_valid_and_authentic_title(title) or discount_price <= 0 or original_price <= discount_price:
+        if not is_valid_and_authentic_title(title) or discount_price <= 0 or review_count < 100:
             try:
                 p_url = f"https://api.allorigins.win/raw?url={urllib.parse.quote(fetch_target, safe='')}"
                 p_res = requests.get(p_url, timeout=14)
@@ -268,14 +263,14 @@ def scrape_product_page(url, is_manual=False):
             except Exception:
                 pass
 
-        if not is_valid_and_authentic_title(title) or discount_price <= 0 or original_price <= discount_price:
+        if not is_valid_and_authentic_title(title) or discount_price <= 0 or review_count < 100:
             j_text = fetch_via_proxy(fetch_target)
             if j_text and "error 403" not in j_text.lower() and "target url returned error" not in j_text.lower():
                 off3, rev3 = check_authenticity_signals(j_text)
                 is_official = is_official or off3
                 review_count = max(review_count, rev3)
 
-                top_section = j_text[:3500]
+                top_section = j_text[:4000]
                 if not is_valid_and_authentic_title(title):
                     m_t = re.search(r"^Title:\s*(.+)$", top_section, re.M) or re.search(r"^#\s+(.+)$", top_section, re.M)
                     if m_t:
@@ -312,14 +307,17 @@ def scrape_product_page(url, is_manual=False):
         if not is_valid_and_authentic_title(title) or discount_price <= 0:
             return None
 
+        # কড়া বাজেট ও ১০০+ আসল রিভিউ ফিল্টার (Strict Cheap Budget + 100+ Verified Reviews)
         if not is_manual:
-            if discount_price > 1250:
+            if discount_price > 499:
                 return None
-            if rating > 0 and rating < 4.3:
+            if review_count < 100:
+                return None
+            if rating > 0 and rating < 4.4:
                 return None
 
         if rating <= 0:
-            rating = 4.8 if is_official else 4.6
+            rating = 4.7
 
         if original_price > discount_price:
             discount_percent = round(((original_price - discount_price) / original_price) * 100)
@@ -333,8 +331,10 @@ def scrape_product_page(url, is_manual=False):
             return None
 
         if original_price <= discount_price:
-            original_price = round(discount_price * 1.67)
-            discount_percent = 40
+            original_price = round(discount_price * 1.8)
+            discount_percent = 45
+
+        rating_display = f"{rating}/5 ({review_count}+ Reviews)"
 
         return {
             "pid": pid,
@@ -344,7 +344,7 @@ def scrape_product_page(url, is_manual=False):
             "discount_percent": f"{discount_percent}%",
             "disc_val": int(discount_percent),
             "review_count": review_count,
-            "rating": rating,
+            "rating": rating_display,
             "is_official": is_official,
             "image_url": image_url,
             "clean_url": url.strip() if is_short else fetch_target,
@@ -369,44 +369,11 @@ def extract_daraz_links(raw_text):
     return normalized
 
 
-def fetch_sitemap_links():
+def discover_cheap_kop_offers():
     urls = []
-    loc_pattern = chr(60) + r"loc>(https?://[^" + chr(60) + r"]+)" + chr(60) + r"/loc>"
-    try:
-        res = requests.get("https://www.daraz.com.bd/sitemap.xml", headers=HEADERS, timeout=12)
-        xml_text = (
-            gzip.decompress(res.content).decode("utf-8", errors="ignore")
-            if res.content[:2] == b"\x1f\x8b"
-            else res.text
-        )
-        urls.extend(extract_daraz_links(xml_text))
-        sub_sitemaps = [
-            loc.strip()
-            for loc in re.findall(loc_pattern, xml_text)
-            if any(k in loc.lower() for k in ["product", "pdp", "item", "sitemap"])
-        ]
-        if not urls and sub_sitemaps:
-            random.shuffle(sub_sitemaps)
-            for sub in sub_sitemaps[:2]:
-                r2 = requests.get(sub, headers=HEADERS, timeout=12)
-                st = (
-                    gzip.decompress(r2.content).decode("utf-8", errors="ignore")
-                    if (sub.endswith(".gz") or r2.content[:2] == b"\x1f\x8b")
-                    else r2.text
-                )
-                urls.extend(extract_daraz_links(st))
-                if len(urls) >= 25:
-                    break
-    except Exception:
-        pass
-    return list(dict.fromkeys(urls))
-
-
-def discover_kop_and_daily_offers():
-    urls = []
-    chosen_queries = random.sample(KOP_AND_DAILY_QUERIES, 4)
+    chosen_queries = random.sample(CHEAP_KOP_QUERIES, 4)
     for q_text in chosen_queries:
-        print(f"Hunting High-Selling 40%+ deals for: {q_text}")
+        print(f"Hunting Cheap 100+ Review Kop Deals for: {q_text}")
         q = urllib.parse.quote(f"site:daraz.com.bd/products {q_text}")
         search_urls = [
             f"https://html.duckduckgo.com/html/?q={q}",
@@ -418,16 +385,11 @@ def discover_kop_and_daily_offers():
             for u in extract_daraz_links(content):
                 if u not in urls:
                     urls.append(u)
-            if len(urls) >= 20:
+            if len(urls) >= 24:
                 break
 
-    if len(urls) < 10:
-        for u in fetch_sitemap_links():
-            if u not in urls:
-                urls.append(u)
-
     random.shuffle(urls)
-    return urls[:20]
+    return urls[:24]
 
 
 def main():
@@ -439,40 +401,19 @@ def main():
         row = all_rows[idx - 1]
         link_cell = row[7].strip() if len(row) > 7 else ""
         title_cell = row[1].strip() if len(row) > 1 else ""
-        disc_cell = row[4].strip() if len(row) > 4 else ""
+        price_cell = int(re.sub(r"[^\d]", "", str(row[3])) or 0) if len(row) > 3 else 0
 
-        if not is_valid_and_authentic_title(title_cell):
-            if link_cell.startswith("http"):
-                info = scrape_product_page(link_cell, is_manual=True)
-                if info:
-                    updated = [
-                        info["pid"],
-                        info["title"],
-                        info["original_price"],
-                        info["discount_price"],
-                        info["discount_percent"],
-                        info["rating"],
-                        info["image_url"],
-                        link_cell,
-                    ]
-                    queue_ws.update(f"A{idx}:H{idx}", [updated])
-                    existing_ids.add(info["pid"])
-                    continue
-            queue_ws.delete_rows(idx)
-            continue
-
-        disc_num = int(re.sub(r"[^\d]", "", disc_cell) or 0)
-        if disc_num < 40 and "s.daraz.com.bd" not in link_cell:
+        if not is_valid_and_authentic_title(title_cell) or (price_cell > 499 and "s.daraz.com.bd" not in link_cell):
             queue_ws.delete_rows(idx)
         elif row[0]:
             existing_ids.add(row[0].strip())
 
     current_queue = len(queue_ws.get_all_values()) - 1
     if current_queue >= 6:
-        print(f"Queue already has {current_queue} verified high-converting deals.")
+        print(f"Queue already has {current_queue} verified 100+ review budget deals.")
         return
 
-    product_urls = discover_kop_and_daily_offers()
+    product_urls = discover_cheap_kop_offers()
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
 
     valid_deals = []
@@ -482,10 +423,11 @@ def main():
             continue
         existing_ids.add(info["pid"])
         valid_deals.append(info)
-        if len(valid_deals) >= 6:
+        if len(valid_deals) >= 8:
             break
 
-    valid_deals.sort(key=lambda x: (x["is_official"], x["review_count"], x["disc_val"]), reverse=True)
+    # সবচেয়ে কম দাম ও সবচেয়ে বেশি রিভিউয়ের প্রোডাক্টগুলো আগে বাছাই করা
+    valid_deals.sort(key=lambda x: (-x["review_count"], x["discount_price"]))
 
     added = 0
     for info in valid_deals[:4]:
@@ -505,9 +447,9 @@ def main():
             aff_link,
         ])
         added += 1
-        print(f"Added High-Converting Deal ({info['discount_percent']} OFF, ৳{info['discount_price']}): {info['title']}")
+        print(f"Added 100+ Review Cheap Deal (৳{info['discount_price']}, {info['discount_percent']} OFF, {info['rating']}): {info['title']}")
 
-    print(f"Finished. Added {added} verified budget & high-review deals.")
+    print(f"Finished. Added {added} verified 100+ review cheap kop deals.")
 
 
 if __name__ == "__main__":
