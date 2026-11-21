@@ -32,6 +32,8 @@ def get_spreadsheet():
 
 # --- লম্বা লিংক শর্ট করার ফাংশন (TinyURL) ---
 def shorten_url(long_url):
+    if not long_url:
+        return ""
     try:
         res = requests.get(f"http://tinyurl.com/api-create.php?url={long_url}", timeout=10)
         if res.status_code == 200:
@@ -68,7 +70,8 @@ def create_collage(products):
 
         # প্রোডাক্ট ইমেজ ডাউনলোড ও রিসাইজ
         try:
-            img_res = requests.get(prod['image_url'], timeout=15)
+            img_url = prod.get('image_url', '').strip()
+            img_res = requests.get(img_url, timeout=15)
             img = Image.open(BytesIO(img_res.content)).convert("RGB")
             img = img.resize((380, 360), Image.Resampling.LANCZOS)
             collage.paste(img, (x_offset + 10, y_offset + 10))
@@ -122,9 +125,14 @@ def post_to_facebook(image_path, caption_html):
 def main():
     ss = get_spreadsheet()
     queue_sheet = ss.worksheet("Queue")
-    records = queue_sheet.get_all_records()
+    raw_records = queue_sheet.get_all_records()
 
-    # কমপক্ষে ৩টি প্রোডাক্ট থাকলেই পোস্ট করবে (সর্বোচ্চ ৬টি নেবে)
+    # কলামের নামের বাড়তি স্পেস এবং বড়-ছোট হাতের অক্ষর ঠিক করা
+    records = []
+    for row in raw_records:
+        clean_row = {str(k).strip().lower(): v for k, v in row.items()}
+        records.append(clean_row)
+
     if len(records) < 3:
         print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। কমপক্ষে ৩টি হলে পোস্ট করা হবে।")
         return
@@ -140,11 +148,13 @@ def main():
     caption_lines = [f"⚡ <b>আজকের সেরা {count}টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
     
     for prod in selected_products:
-        price = prod['discount_price']
-        raw_title = str(prod['title']).strip()
+        price = prod.get('discount_price', '')
+        raw_title = str(prod.get('title', '')).strip()
         short_title = raw_title[:38] + "..." if len(raw_title) > 38 else raw_title
         
-        short_link = shorten_url(prod['affiliate_link'])
+        # affiliate_link বা link কলাম থেকে লিংক নেওয়া
+        raw_link = prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or ""
+        short_link = shorten_url(str(raw_link).strip())
         
         caption_lines.append(f"✅ <b>{price} টাকায়</b> {short_title}\n👉 {short_link}")
 
