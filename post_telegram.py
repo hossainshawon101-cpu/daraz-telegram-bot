@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import requests
 import gspread
@@ -6,19 +7,21 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- কনফিগারেশন ---
+# --- কনফিগারেশন (Workflow Secrets অনুযায়ী) ---
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-SHEET_NAME = "Daraz Deals"
+SHEET_ID = os.environ.get("SHEET_ID")
+FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
+FB_ACCESS_TOKEN = os.environ.get("FB_ACCESS_TOKEN")
 
 # --- গুগল শিট কানেকশন ---
 def get_sheet():
-    creds_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
+    creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     creds_dict = json.loads(creds_json)
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    return client.open(SHEET_NAME).sheet1
+    return client.open_by_key(SHEET_ID).sheet1
 
 # --- লম্বা লিংক শর্ট করার ফাংশন (TinyURL) ---
 def shorten_url(long_url):
@@ -83,17 +86,42 @@ def create_collage(products):
     collage.save(output_path, quality=90)
     return output_path
 
+# --- ফেসবুক পেজে কোলাজ পোস্ট করার ফাংশন ---
+def post_to_facebook(image_path, caption_html):
+    if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
+        print("FB_PAGE_ID বা FB_ACCESS_TOKEN পাওয়া যায়নি, ফেসবুক পোস্ট স্কিপ করা হলো।")
+        return
+
+    # ফেসবুকের জন্য HTML ট্যাগ (<b>, </b>) পরিষ্কার করা
+    fb_caption = re.sub(r'<[^>]+>', '', caption_html)
+    fb_url = f"https://graph.facebook.com/v19.0/{FB_PAGE_ID}/photos"
+
+    try:
+        with open(image_path, "rb") as photo:
+            payload = {
+                "caption": fb_caption,
+                "access_token": FB_ACCESS_TOKEN
+            }
+            files = {"source": photo}
+            res = requests.post(fb_url, data=payload, files=files, timeout=25)
+            if res.status_code == 200:
+                print("ফেসবুক পেজেও সফলভাবে কোলাজ পোস্ট হয়েছে!")
+            else:
+                print(f"ফেসবুক পোস্ট এরর: {res.text}")
+    except Exception as e:
+        print(f"ফেসবুক কানেকশন এরর: {e}")
+
 # --- মেইন ফাংশন ---
 def main():
     sheet = get_sheet()
     records = sheet.get_all_records()
 
     if len(records) < 6:
-        print("শিটে ৬টির কম প্রোডাক্ট আছে। আরও প্রোডাক্ট যোগ হওয়ার জন্য অপেক্ষা করা হচ্ছে।")
+        print(f"শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৬টি পূর্ণ হলে পোস্ট করা হবে।")
         return
 
     selected_products = records[:6]
-    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
 
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
@@ -108,12 +136,12 @@ def main():
         
         short_link = shorten_url(prod['affiliate_link'])
         
-        caption_lines.append(f"✅ <b>{price} টাকায়</b> {short_title}\n👉 {short_link}")
+        caption_lines.append(f"✅ <b>{price} টাকায়</b> {short_title}\n👉 {short_link}")
 
     caption_text = "\n".join(caption_lines)
 
     # ৩. টেলিগ্রামে পোস্ট পাঠানো
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
     with open(image_path, "rb") as photo:
         payload = {
             "chat_id": CHAT_ID,
@@ -121,15 +149,19 @@ def main():
             "parse_mode": "HTML"
         }
         files = {"photo": photo}
-        response = requests.post(url, data=payload, files=files)
+        response = requests.post(tg_url, data=payload, files=files)
 
     if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
-        # ৪. পোস্ট হয়ে যাওয়া ২ থেকে ৭ নম্বর রো ডিলিট করা
+        print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
+        
+        # ৪. ফেসবুক পেজে পোস্ট পাঠানো
+        post_to_facebook(image_path, caption_text)
+
+        # ৫. পোস্ট হয়ে যাওয়া ২ থেকে ৭ নম্বর রো ডিলিট করা
         sheet.delete_rows(2, 7)
-        print("পোস্টকৃত ৬টি রো শিট থেকে মুছে ফেলা হয়েছে।")
+        print("পোস্টকৃত ৬টি রো শিট থেকে মুছে ফেলা হয়েছে।")
     else:
-        print(f"পোস্ট করতে সমস্যা হয়েছে: {response.text}")
+        print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
 
 if __name__ == "__main__":
     main()
