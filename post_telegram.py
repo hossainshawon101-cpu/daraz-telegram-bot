@@ -15,22 +15,20 @@ FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
 FB_ACCESS_TOKEN = os.environ.get("FB_ACCESS_TOKEN")
 
 # --- গুগল শিট কানেকশন ---
-def get_sheet():
+def get_spreadsheet():
     creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     creds_dict = json.loads(creds_json)
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
 
-    # যদি SHEET_ID-তে পুরো URL দেওয়া থাকে, তবে আসল ID বের করে নেওয়া
     match = re.search(r"/d/([a-zA-Z0-9-_]+)", RAW_SHEET_ID)
     clean_id = match.group(1) if match else RAW_SHEET_ID
 
     try:
-        return client.open_by_key(clean_id).sheet1
-    except Exception as e:
-        print(f"ID দিয়ে শিট ওপেন হয়নি ({e}), নাম দিয়ে চেষ্টা করা হচ্ছে...")
-        return client.open("Daraz Deals").sheet1
+        return client.open_by_key(clean_id)
+    except Exception:
+        return client.open("Daraz Deals")
 
 # --- লম্বা লিংক শর্ট করার ফাংশন (TinyURL) ---
 def shorten_url(long_url):
@@ -45,7 +43,8 @@ def shorten_url(long_url):
 # --- ৩x২ গ্রিড কোলাজ ইমেজ তৈরি ---
 def create_collage(products):
     card_w, card_h = 400, 480
-    cols, rows = 3, 2
+    cols = 3
+    rows = 2 if len(products) > 3 else 1
     collage = Image.new("RGB", (card_w * cols, card_h * rows), (245, 245, 245))
     draw = ImageDraw.Draw(collage)
 
@@ -121,21 +120,24 @@ def post_to_facebook(image_path, caption_html):
 
 # --- মেইন ফাংশন ---
 def main():
-    sheet = get_sheet()
-    records = sheet.get_all_records()
+    ss = get_spreadsheet()
+    queue_sheet = ss.worksheet("Queue")
+    records = queue_sheet.get_all_records()
 
-    if len(records) < 6:
-        print(f"শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৬টি পূর্ণ হলে পোস্ট করা হবে।")
+    # কমপক্ষে ৩টি প্রোডাক্ট থাকলেই পোস্ট করবে (সর্বোচ্চ ৬টি নেবে)
+    if len(records) < 3:
+        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। কমপক্ষে ৩টি হলে পোস্ট করা হবে।")
         return
 
-    selected_products = records[:6]
-    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    count = min(6, len(records))
+    selected_products = records[:count]
+    print(f"{count}টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
 
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
 
     # ২. ক্লিন ক্যাপশন তৈরি
-    caption_lines = ["⚡ <b>আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
+    caption_lines = [f"⚡ <b>আজকের সেরা {count}টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
     
     for prod in selected_products:
         price = prod['discount_price']
@@ -165,9 +167,19 @@ def main():
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, caption_text)
 
-        # ৫. পোস্ট হয়ে যাওয়া ২ থেকে ৭ নম্বর রো ডিলিট করা
-        sheet.delete_rows(2, 7)
-        print("পোস্টকৃত ৬টি রো শিট থেকে মুছে ফেলা হয়েছে।")
+        # ৫. Posted_History ট্যাবে রেকর্ড সেভ করা
+        try:
+            history_sheet = ss.worksheet("Posted_History")
+            rows_to_move = queue_sheet.get_values(f"A2:H{count + 1}")
+            if rows_to_move:
+                history_sheet.append_rows(rows_to_move)
+                print("Posted_History ট্যাবে রেকর্ড সেভ হয়েছে।")
+        except Exception as e:
+            print(f"History সেভ করতে সামান্য সমস্যা: {e}")
+
+        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া রো ডিলিট করা
+        queue_sheet.delete_rows(2, count + 1)
+        print(f"পোস্টকৃত {count}টি রো Queue থেকে সরানো হয়েছে।")
     else:
         print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
 
