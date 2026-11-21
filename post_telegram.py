@@ -9,7 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- কনফিগারেশন ---
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-SHEET_NAME = "Daraz Deals"  # আপনার গুগল শিটের আসল নাম দিন
+SHEET_NAME = "Daraz Deals"
 
 # --- গুগল শিট কানেকশন ---
 def get_sheet():
@@ -65,7 +65,7 @@ def create_collage(products):
         except Exception as e:
             print(f"Image load error: {e}")
 
-        # ডিসকাউন্ট ব্যাজ (উপরে ডান কোণায় লাল ব্যাজ)
+        # ডিসকাউন্ট ব্যাজ (উপরে ডান কোণায় লাল ব্যাজ)
         discount_pct = str(prod.get('discount_percent', '')).strip()
         if discount_pct:
             draw.rectangle([x_offset + 295, y_offset + 15, x_offset + 385, y_offset + 48], fill=(230, 46, 4))
@@ -74,7 +74,7 @@ def create_collage(products):
         # নিচের অংশে প্রাইস ও রেটিং বসানো
         disc_price = prod.get('discount_price', '')
         orig_price = prod.get('original_price', '')
-        rating_raw = str(prod.get('rating', '')).split('|')[0].strip() # শুধু রেটিং অংশটুকু নেওয়া
+        rating_raw = str(prod.get('rating', '')).split('|')[0].strip()
 
         draw.text((x_offset + 18, y_offset + 382), f"৳ {disc_price}", fill=(248, 86, 6), font=font_price)
         draw.text((x_offset + 165, y_offset + 390), f"৳{orig_price}", fill=(140, 140, 140), font=font_old)
@@ -91,11 +91,11 @@ def main():
 
     # কমপক্ষে ৬টি প্রোডাক্ট আছে কি না চেক করা
     if len(records) < 6:
-        print("শিটে ৬টির কম প্রোডাক্ট আছে। আরও প্রোডাক্ট যোগ হওয়ার জন্য অপেক্ষা করা হচ্ছে।")
+        print("শিটে ৬টির কম প্রোডাক্ট আছে। আরও প্রোডাক্ট যোগ হওয়ার জন্য অপেক্ষা করা হচ্ছে।")
         return
 
     selected_products = records[:6]
-    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
 
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
@@ -105,13 +105,12 @@ def main():
     
     for prod in selected_products:
         price = prod['discount_price']
-        # টাইটেল ছোট রাখা (প্রথম ৩৫ অক্ষর) যাতে ক্যাপশন ক্লিন থাকে
         raw_title = str(prod['title']).strip()
         short_title = raw_title[:38] + "..." if len(raw_title) > 38 else raw_title
         
         short_link = shorten_url(prod['affiliate_link'])
         
-        caption_lines.append(f"✅ <b>{price} টাকায়</b> {short_title}\n👉 {short_link}")
+        caption_lines.append(f"✅ <b>{price} টাকায়</b> {short_title}\n👉 {short_link}")
 
     caption_text = "\n".join(caption_lines)
 
@@ -124,15 +123,4 @@ def main():
             "parse_mode": "HTML"
         }
         files = {"photo": photo}
-        response = requests.post(url, data=payload, files=files)
-
-    if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
-        # ৪. পোস্ট হয়ে যাওয়া ২ থেকে ৭ নম্বর রো ডিলিট করা (যাতে পরের বার নতুন ৬টি পোস্ট হয়)
-        sheet.delete_rows(2, 7)
-        print("পোস্টকৃত ৬টি রো শিট থেকে মুছে ফেলা হয়েছে।")
-    else:
-        print(f"পোস্ট করতে সমস্যা হয়েছে: {response.text}")
-
-if __name__ == "__main__":
-    main()
+        response = requests.post(
