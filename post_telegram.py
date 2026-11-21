@@ -37,7 +37,6 @@ def create_collage(products):
     collage = Image.new("RGB", (card_w * cols, card_h * rows), (245, 245, 245))
     draw = ImageDraw.Draw(collage)
 
-    # ফন্ট লোড (লিনাক্স/গিটহাব অ্যাকশনসের ডিফল্ট ফন্ট)
     try:
         font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
         font_old = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
@@ -65,7 +64,7 @@ def create_collage(products):
         except Exception as e:
             print(f"Image load error: {e}")
 
-        # ডিসকাউন্ট ব্যাজ (উপরে ডান কোণায় লাল ব্যাজ)
+        # ডিসকাউন্ট ব্যাজ
         discount_pct = str(prod.get('discount_percent', '')).strip()
         if discount_pct:
             draw.rectangle([x_offset + 295, y_offset + 15, x_offset + 385, y_offset + 48], fill=(230, 46, 4))
@@ -89,7 +88,6 @@ def main():
     sheet = get_sheet()
     records = sheet.get_all_records()
 
-    # কমপক্ষে ৬টি প্রোডাক্ট আছে কি না চেক করা
     if len(records) < 6:
         print("শিটে ৬টির কম প্রোডাক্ট আছে। আরও প্রোডাক্ট যোগ হওয়ার জন্য অপেক্ষা করা হচ্ছে।")
         return
@@ -123,4 +121,15 @@ def main():
             "parse_mode": "HTML"
         }
         files = {"photo": photo}
-        response = requests.post(
+        response = requests.post(url, data=payload, files=files)
+
+    if response.status_code == 200:
+        print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
+        # ৪. পোস্ট হয়ে যাওয়া ২ থেকে ৭ নম্বর রো ডিলিট করা
+        sheet.delete_rows(2, 7)
+        print("পোস্টকৃত ৬টি রো শিট থেকে মুছে ফেলা হয়েছে।")
+    else:
+        print(f"পোস্ট করতে সমস্যা হয়েছে: {response.text}")
+
+if __name__ == "__main__":
+    main()
