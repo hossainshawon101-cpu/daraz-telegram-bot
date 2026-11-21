@@ -9,7 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # --- কনফিগারেশন (Workflow Secrets অনুযায়ী) ---
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+CHAT_ID = os.environ.get("TELEGRAM_CHANNEL_ID") or os.environ.get("TELEGRAM_CHAT_ID")
 RAW_SHEET_ID = os.environ.get("SHEET_ID", "").strip()
 FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
 FB_ACCESS_TOKEN = os.environ.get("FB_ACCESS_TOKEN")
@@ -152,7 +152,6 @@ def main():
         raw_title = str(prod.get('title', '')).strip()
         short_title = raw_title[:38] + "..." if len(raw_title) > 38 else raw_title
         
-        # affiliate_link বা link কলাম থেকে লিংক নেওয়া
         raw_link = prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or ""
         short_link = shorten_url(str(raw_link).strip())
         
