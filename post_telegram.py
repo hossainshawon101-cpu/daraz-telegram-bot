@@ -10,7 +10,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- কনফিগারেশন (Workflow Secrets অনুযায়ী) ---
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-SHEET_ID = os.environ.get("SHEET_ID")
+RAW_SHEET_ID = os.environ.get("SHEET_ID", "").strip()
 FB_PAGE_ID = os.environ.get("FB_PAGE_ID")
 FB_ACCESS_TOKEN = os.environ.get("FB_ACCESS_TOKEN")
 
@@ -21,7 +21,16 @@ def get_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    return client.open_by_key(SHEET_ID).sheet1
+
+    # যদি SHEET_ID-তে পুরো URL দেওয়া থাকে, তবে আসল ID বের করে নেওয়া
+    match = re.search(r"/d/([a-zA-Z0-9-_]+)", RAW_SHEET_ID)
+    clean_id = match.group(1) if match else RAW_SHEET_ID
+
+    try:
+        return client.open_by_key(clean_id).sheet1
+    except Exception as e:
+        print(f"ID দিয়ে শিট ওপেন হয়নি ({e}), নাম দিয়ে চেষ্টা করা হচ্ছে...")
+        return client.open("Daraz Deals").sheet1
 
 # --- লম্বা লিংক শর্ট করার ফাংশন (TinyURL) ---
 def shorten_url(long_url):
@@ -92,7 +101,6 @@ def post_to_facebook(image_path, caption_html):
         print("FB_PAGE_ID বা FB_ACCESS_TOKEN পাওয়া যায়নি, ফেসবুক পোস্ট স্কিপ করা হলো।")
         return
 
-    # ফেসবুকের জন্য HTML ট্যাগ (<b>, </b>) পরিষ্কার করা
     fb_caption = re.sub(r'<[^>]+>', '', caption_html)
     fb_url = f"https://graph.facebook.com/v19.0/{FB_PAGE_ID}/photos"
 
