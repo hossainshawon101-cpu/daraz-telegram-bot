@@ -45,13 +45,12 @@ def shorten_url(long_url):
 # --- ৩x২ গ্রিড কোলাজ ইমেজ তৈরি ---
 def create_collage(products):
     card_w, card_h = 400, 480
-    cols = 3
-    rows = 2 if len(products) > 3 else 1
+    cols, rows = 3, 2
     collage = Image.new("RGB", (card_w * cols, card_h * rows), (245, 245, 245))
     draw = ImageDraw.Draw(collage)
 
     try:
-        font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
         font_old = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
         font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
     except:
@@ -84,26 +83,25 @@ def create_collage(products):
             draw.rectangle([x_offset + 295, y_offset + 15, x_offset + 385, y_offset + 48], fill=(230, 46, 4))
             draw.text((x_offset + 308, y_offset + 21), f"-{discount_pct}", fill=(255, 255, 255), font=font_badge)
 
-        # নিচের অংশে প্রাইস ও রেটিং বসানো
+        # নিচের অংশে প্রাইস ও রেটিং বসানো (Tk ও Rating ফরম্যাট যাতে বক্স না আসে)
         disc_price = prod.get('discount_price', '')
         orig_price = prod.get('original_price', '')
         rating_raw = str(prod.get('rating', '')).split('|')[0].strip()
 
-        draw.text((x_offset + 18, y_offset + 382), f"৳ {disc_price}", fill=(248, 86, 6), font=font_price)
-        draw.text((x_offset + 165, y_offset + 390), f"৳{orig_price}", fill=(140, 140, 140), font=font_old)
-        draw.text((x_offset + 18, y_offset + 425), f"⭐ {rating_raw}", fill=(80, 80, 80), font=font_old)
+        draw.text((x_offset + 18, y_offset + 382), f"Tk {disc_price}", fill=(248, 86, 6), font=font_price)
+        draw.text((x_offset + 165, y_offset + 388), f"Tk {orig_price}", fill=(140, 140, 140), font=font_old)
+        draw.text((x_offset + 18, y_offset + 425), f"Rating: {rating_raw}", fill=(80, 80, 80), font=font_old)
 
     output_path = "collage.jpg"
     collage.save(output_path, quality=90)
     return output_path
 
 # --- ফেসবুক পেজে কোলাজ পোস্ট করার ফাংশন ---
-def post_to_facebook(image_path, caption_html):
+def post_to_facebook(image_path, fb_caption):
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
         print("FB_PAGE_ID বা FB_ACCESS_TOKEN পাওয়া যায়নি, ফেসবুক পোস্ট স্কিপ করা হলো।")
         return
 
-    fb_caption = re.sub(r'<[^>]+>', '', caption_html)
     fb_url = f"https://graph.facebook.com/v19.0/{FB_PAGE_ID}/photos"
 
     try:
@@ -127,44 +125,50 @@ def main():
     queue_sheet = ss.worksheet("Queue")
     raw_records = queue_sheet.get_all_records()
 
-    # কলামের নামের বাড়তি স্পেস এবং বড়-ছোট হাতের অক্ষর ঠিক করা
     records = []
     for row in raw_records:
         clean_row = {str(k).strip().lower(): v for k, v in row.items()}
         records.append(clean_row)
 
-    if len(records) < 3:
-        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। কমপক্ষে ৩টি হলে পোস্ট করা হবে।")
+    # পুরো ৩x২ গ্রিড পূর্ণ করার জন্য কমপক্ষে ৬টি প্রোডাক্ট অপেক্ষা করবে
+    if len(records) < 6:
+        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৬টি পূর্ণ হলে পোস্ট করা হবে।")
         return
 
-    count = min(6, len(records))
-    selected_products = records[:count]
-    print(f"{count}টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    selected_products = records[:6]
+    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
 
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
 
-    # ২. ক্লিন ক্যাপশন তৈরি
-    caption_lines = [f"⚡ <b>আজকের সেরা {count}টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
+    # ২. টেলিগ্রাম ও ফেসবুকের জন্য আলাদা ক্লিন ক্যাপশন তৈরি
+    tg_lines = ["⚡ <b>আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
+    fb_lines = ["⚡ আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
     
     for prod in selected_products:
         price = prod.get('discount_price', '')
+        discount = str(prod.get('discount_percent', '')).strip()
         raw_title = str(prod.get('title', '')).strip()
-        short_title = raw_title[:38] + "..." if len(raw_title) > 38 else raw_title
+        short_title = raw_title[:36] + "..." if len(raw_title) > 36 else raw_title
         
         raw_link = prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or ""
         short_link = shorten_url(str(raw_link).strip())
         
-        caption_lines.append(f"✅ <b>{price} টাকায়</b> {short_title}\n👉 {short_link}")
+        # টেলিগ্রামে ক্লিকেবল daraz.com.bd টেক্সট দেখাবে
+        tg_lines.append(f"✅ <b>{discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 <a href='{short_link}'>https://s.daraz.com.bd/deal</a>")
+        
+        # ফেসবুকে সরাসরি শর্ট লিংক দেখাবে
+        fb_lines.append(f"✅ {discount} OFF {short_title} ({price} টাকা)\n👉 {short_link}")
 
-    caption_text = "\n".join(caption_lines)
+    tg_caption = "\n".join(tg_lines)
+    fb_caption = "\n".join(fb_lines)
 
     # ৩. টেলিগ্রামে পোস্ট পাঠানো
     tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
     with open(image_path, "rb") as photo:
         payload = {
             "chat_id": CHAT_ID,
-            "caption": caption_text,
+            "caption": tg_caption,
             "parse_mode": "HTML"
         }
         files = {"photo": photo}
@@ -174,12 +178,12 @@ def main():
         print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
-        post_to_facebook(image_path, caption_text)
+        post_to_facebook(image_path, fb_caption)
 
         # ৫. Posted_History ট্যাবে রেকর্ড সেভ করা
         try:
             history_sheet = ss.worksheet("Posted_History")
-            rows_to_move = queue_sheet.get_values(f"A2:H{count + 1}")
+            rows_to_move = queue_sheet.get_values("A2:H7")
             if rows_to_move:
                 history_sheet.append_rows(rows_to_move)
                 print("Posted_History ট্যাবে রেকর্ড সেভ হয়েছে।")
@@ -187,8 +191,8 @@ def main():
             print(f"History সেভ করতে সামান্য সমস্যা: {e}")
 
         # ৬. Queue থেকে পোস্ট হয়ে যাওয়া রো ডিলিট করা
-        queue_sheet.delete_rows(2, count + 1)
-        print(f"পোস্টকৃত {count}টি রো Queue থেকে সরানো হয়েছে।")
+        queue_sheet.delete_rows(2, 7)
+        print("পোস্টকৃত ৬টি রো Queue থেকে সরানো হয়েছে।")
     else:
         print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
 
