@@ -112,7 +112,7 @@ def get_sheets():
     try:
         sheet = client.open_by_key(sheet_id)
     except Exception:
-        sheet = client.open("Daraz_Affiliate_Automation")
+        sheet = client.open("Daraz Deals")
     return sheet.worksheet("Queue"), sheet.worksheet("Posted_History")
 
 
@@ -246,7 +246,6 @@ def main():
     existing_images = set()
     existing_token_sets = []
 
-    # Posted_History-এর শেষ ১৫০টি পোস্ট চেক করে ডুপ্লিকেট ব্লক করা
     for row in history_rows[1:][-150:]:
         if len(row) > 0 and row[0]:
             existing_ids.add(row[0].strip())
@@ -278,11 +277,11 @@ def main():
                 existing_images.add(img_cell)
 
     current_queue = len(queue_ws.get_all_values()) - 1
-    if current_queue >= 4:
+    if current_queue >= 6:
         print(f"Queue already has {current_queue} unique verified live deals.")
         return
 
-    chosen_queries = random.sample(DIVERSE_DARAZ_QUERIES, 5)
+    chosen_queries = random.sample(DIVERSE_DARAZ_QUERIES, 8)
     tracking_param = os.environ.get("AFFILIATE_TRACKING_PARAM", "").strip().lstrip("?&")
 
     valid_deals = []
@@ -306,10 +305,9 @@ def main():
                 existing_images.add(clean_img)
             existing_token_sets.append(tokenize_title(info["title"]))
             valid_deals.append(info)
-            # প্রতি কুয়েরি থেকে সর্বোচ্চ ১টি সেরা প্রোডাক্ট নেওয়া, যাতে সব পোস্ট ভিন্ন ক্যাটাগরির হয়
             break
 
-        if len(valid_deals) >= 4:
+        if len(valid_deals) >= (6 - current_queue):
             break
 
     added = 0
@@ -330,7 +328,7 @@ def main():
             aff_link,
         ])
         added += 1
-        print(f"Added Unique Deal (৳{info['discount_price']}, {info['discount_percent']} OFF): {info['title']}")
+        print(f"Added Unique Deal (Tk {info['discount_price']}, {info['discount_percent']} OFF): {info['title']}")
 
     print(f"Finished. Added {added} completely unique live deals.")
 
