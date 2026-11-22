@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import time
 import requests
 import gspread
 from io import BytesIO
@@ -75,7 +76,7 @@ def create_deal_card(prod):
     draw.text((28, 610), f"Rating: {rating_raw}", fill=(80, 80, 80), font=font_old)
 
     output_path = "deal_card.jpg"
-    card.save(output_path, quality=92)
+    card.save(output_path, quality=90)
     return output_path
 
 # --- ফেসবুক পেজে পোস্ট করার ফাংশন ---
@@ -101,6 +102,20 @@ def post_to_facebook(image_path, fb_caption):
     except Exception as e:
         print(f"ফেসবুক কানেকশন এরর: {e}")
 
+# --- টেলিগ্রামে অটো-রিট্রাইসহ পোস্ট পাঠানোর ফাংশন ---
+def send_telegram_with_retry(tg_url, payload, image_path, retries=3):
+    for attempt in range(1, retries + 1):
+        try:
+            with open(image_path, "rb") as photo:
+                files = {"photo": photo}
+                response = requests.post(tg_url, data=payload, files=files, timeout=25)
+                return response
+        except Exception as e:
+            print(f"টেলিগ্রাম কানেকশন চেষ্টা #{attempt} ব্যর্থ: {e}")
+            if attempt < retries:
+                time.sleep(3)
+    return None
+
 # --- মেইন ফাংশন ---
 def main():
     ss = get_spreadsheet()
@@ -122,8 +137,7 @@ def main():
     # ১. ডিল কার্ড ছবি তৈরি
     image_path = create_deal_card(prod)
 
-    # ২. ক্লিন ক্যাপশন তৈরি (কোনো বাটন ছাড়াই ছোট daraz.com.bd লিংক দেখাবে)
-    pid = str(prod.get('product_id', '')).strip()
+    # ২. ক্লিন ক্যাপশন তৈরি (কোনো লম্বা URL ছাড়াই, নিচে ১টি সিঙ্গেল অর্ডার বাটন থাকবে)
     price = prod.get('discount_price', '')
     orig_price = prod.get('original_price', '')
     discount = str(prod.get('discount_percent', '')).strip()
@@ -131,14 +145,12 @@ def main():
     title = str(prod.get('title', '')).strip()
     raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
 
-    clean_display_url = f"https://www.daraz.com.bd/products/i{pid}.html" if pid else "https://www.daraz.com.bd"
-
     tg_caption = (
         f"🔥 <b>{discount} OFF ফ্ল্যাশ ডিল!</b>\n\n"
         f"📦 <b>{title}</b>\n\n"
         f"💰 অফার প্রাইস: <b>{price} টাকা</b> (আগের দাম <s>{orig_price} টাকা</s>)\n"
         f"⭐ রেটিং: {rating}\n\n"
-        f"🛒 <b>অর্ডার লিংক:</b>\n<a href='{raw_link}'>{clean_display_url}</a>"
+        f"👇 <b>অর্ডার করতে নিচের বাটনে ক্লিক করুন:</b>"
     )
 
     fb_caption = (
@@ -149,19 +161,24 @@ def main():
         f"🛒 অর্ডার লিংক:\n{raw_link}"
     )
 
-    # ৩. টেলিগ্রামে পোস্ট পাঠানো
-    tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    with open(image_path, "rb") as photo:
-        payload = {
-            "chat_id": CHAT_ID,
-            "caption": tg_caption,
-            "parse_mode": "HTML"
-        }
-        files = {"photo": photo}
-        response = requests.post(tg_url, data=payload, files=files)
+    reply_markup = json.dumps({
+        "inline_keyboard": [
+            [{"text": f"🛒 দারাজে অর্ডার করুন (৳{price})", "url": raw_link}]
+        ]
+    })
 
-    if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে ছোট লিংকসহ পোস্ট হয়েছে!")
+    # ৩. টেলিগ্রামে পোস্ট পাঠানো (৩ বার পর্যন্ত অটো-রিট্রাইসহ)
+    tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    payload = {
+        "chat_id": CHAT_ID,
+        "caption": tg_caption,
+        "parse_mode": "HTML",
+        "reply_markup": reply_markup
+    }
+    response = send_telegram_with_retry(tg_url, payload, image_path)
+
+    if response and response.status_code == 200:
+        print("টেলিগ্রামে সফলভাবে পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
@@ -187,7 +204,8 @@ def main():
         queue_sheet.delete_rows(2)
         print("পোস্টকৃত রো Queue থেকে সরানো হয়েছে।")
     else:
-        print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
+        err_msg = response.text if response else "Connection failed after 3 retries"
+        print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {err_msg}")
 
 if __name__ == "__main__":
     main()
