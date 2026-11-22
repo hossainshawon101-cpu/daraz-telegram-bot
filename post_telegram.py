@@ -122,7 +122,8 @@ def main():
     # ১. ডিল কার্ড ছবি তৈরি
     image_path = create_deal_card(prod)
 
-    # ২. ক্যাপশন তৈরি (কোনো tinyurl, বাটন বা পপ-আপ ছাড়াই সরাসরি daraz.com.bd লিংক)
+    # ২. ক্লিন ক্যাপশন তৈরি (কোনো বাটন ছাড়াই ছোট daraz.com.bd লিংক দেখাবে)
+    pid = str(prod.get('product_id', '')).strip()
     price = prod.get('discount_price', '')
     orig_price = prod.get('original_price', '')
     discount = str(prod.get('discount_percent', '')).strip()
@@ -130,12 +131,14 @@ def main():
     title = str(prod.get('title', '')).strip()
     raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
 
+    clean_display_url = f"https://www.daraz.com.bd/products/i{pid}.html" if pid else "https://www.daraz.com.bd"
+
     tg_caption = (
         f"🔥 <b>{discount} OFF ফ্ল্যাশ ডিল!</b>\n\n"
         f"📦 <b>{title}</b>\n\n"
         f"💰 অফার প্রাইস: <b>{price} টাকা</b> (আগের দাম <s>{orig_price} টাকা</s>)\n"
         f"⭐ রেটিং: {rating}\n\n"
-        f"🛒 <b>অর্ডার লিংক (সরাসরি দারাজ):</b>\n{raw_link}"
+        f"🛒 <b>অর্ডার লিংক:</b>\n<a href='{raw_link}'>{clean_display_url}</a>"
     )
 
     fb_caption = (
@@ -158,7 +161,7 @@ def main():
         response = requests.post(tg_url, data=payload, files=files)
 
     if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে ডাইরেক্ট দারাজ লিংকসহ পোস্ট হয়েছে!")
+        print("টেলিগ্রামে সফলভাবে ছোট লিংকসহ পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
