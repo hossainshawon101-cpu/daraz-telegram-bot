@@ -30,7 +30,7 @@ def get_spreadsheet():
     except Exception:
         return client.open("Daraz Deals")
 
-# --- লম্বা লিংক শর্ট করার ফাংশন (TinyURL) ---
+# --- লম্বা লিংক শর্ট করার ফাংশন (শুধু ফেসবুকের জন্য) ---
 def shorten_url(long_url):
     if not long_url:
         return ""
@@ -83,7 +83,7 @@ def create_collage(products):
             draw.rectangle([x_offset + 295, y_offset + 15, x_offset + 385, y_offset + 48], fill=(230, 46, 4))
             draw.text((x_offset + 308, y_offset + 21), f"-{discount_pct}", fill=(255, 255, 255), font=font_badge)
 
-        # নিচের অংশে প্রাইস ও রেটিং বসানো (Tk ও Rating ফরম্যাট যাতে বক্স না আসে)
+        # নিচের অংশে প্রাইস ও রেটিং বসানো
         disc_price = prod.get('discount_price', '')
         orig_price = prod.get('original_price', '')
         rating_raw = str(prod.get('rating', '')).split('|')[0].strip()
@@ -130,7 +130,6 @@ def main():
         clean_row = {str(k).strip().lower(): v for k, v in row.items()}
         records.append(clean_row)
 
-    # পুরো ৩x২ গ্রিড পূর্ণ করার জন্য কমপক্ষে ৬টি প্রোডাক্ট অপেক্ষা করবে
     if len(records) < 6:
         print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৬টি পূর্ণ হলে পোস্ট করা হবে।")
         return
@@ -146,18 +145,20 @@ def main():
     fb_lines = ["⚡ আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
     
     for prod in selected_products:
+        pid = str(prod.get('product_id', '')).strip()
         price = prod.get('discount_price', '')
         discount = str(prod.get('discount_percent', '')).strip()
         raw_title = str(prod.get('title', '')).strip()
         short_title = raw_title[:36] + "..." if len(raw_title) > 36 else raw_title
         
-        raw_link = prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or ""
-        short_link = shorten_url(str(raw_link).strip())
+        raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
+        short_link = shorten_url(raw_link)
         
-        # টেলিগ্রামে ক্লিকেবল daraz.com.bd টেক্সট দেখাবে
-        tg_lines.append(f"✅ <b>{discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 <a href='{short_link}'>https://s.daraz.com.bd/deal</a>")
+        # টেলিগ্রামে সরাসরি দারাজের রিয়েল অ্যাফিলিয়েট লিংক কাজ করবে
+        display_url = f"https://www.daraz.com.bd/products/i{pid}.html" if pid else "https://www.daraz.com.bd"
+        tg_lines.append(f"✅ <b>{discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 <a href='{raw_link}'>{display_url}</a>")
         
-        # ফেসবুকে সরাসরি শর্ট লিংক দেখাবে
+        # ফেসবুকে শর্ট লিংক দেখাবে
         fb_lines.append(f"✅ {discount} OFF {short_title} ({price} টাকা)\n👉 {short_link}")
 
     tg_caption = "\n".join(tg_lines)
