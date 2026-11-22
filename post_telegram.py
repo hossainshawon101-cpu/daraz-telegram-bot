@@ -31,10 +31,10 @@ def get_spreadsheet():
     except Exception:
         return client.open("Daraz Deals")
 
-# --- ৩x২ গ্রিড কোলাজ ইমেজ তৈরি ---
+# --- ১x৩ গ্রিড কোলাজ ইমেজ তৈরি (৩টি প্রোডাক্ট একসাথে) ---
 def create_collage(products):
     card_w, card_h = 400, 480
-    cols, rows = 3, 2
+    cols, rows = 3, 1
     collage = Image.new("RGB", (card_w * cols, card_h * rows), (245, 245, 245))
     draw = ImageDraw.Draw(collage)
 
@@ -48,10 +48,8 @@ def create_collage(products):
         font_badge = ImageFont.load_default()
 
     for idx, prod in enumerate(products):
-        r = idx // cols
-        c = idx % cols
-        x_offset = c * card_w
-        y_offset = r * card_h
+        x_offset = idx * card_w
+        y_offset = 0
 
         # সাদা কার্ড ব্যাকগ্রাউন্ড
         draw.rectangle([x_offset + 5, y_offset + 5, x_offset + card_w - 5, y_offset + card_h - 5], fill=(255, 255, 255), outline=(220, 220, 220), width=2)
@@ -119,19 +117,20 @@ def main():
         clean_row = {str(k).strip().lower(): v for k, v in row.items()}
         records.append(clean_row)
 
-    if len(records) < 6:
-        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৬টি পূর্ণ হলে পোস্ট করা হবে।")
+    # প্রতি পোস্টে ৩টি প্রোডাক্ট নেওয়া হবে যাতে ছবি ও লিংক একসাথে ১০২৪ অক্ষরের ভেতরে ধরে
+    if len(records) < 3:
+        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৩টি পূর্ণ হলে পোস্ট করা হবে।")
         return
 
-    selected_products = records[:6]
-    print("৬টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    selected_products = records[:3]
+    print("৩টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
 
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
 
-    # ২. ক্যাপশন তৈরি (কোনো বাটন ও tinyurl ছাড়াই সরাসরি daraz.com.bd লিংক)
-    tg_lines = ["⚡ <b>আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
-    fb_lines = ["⚡ আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
+    # ২. একসাথে ছবি ও লিংকের জন্য ক্যাপশন তৈরি (কোনো বাটন ও tinyurl ছাড়াই)
+    tg_lines = ["⚡ <b>আজকের সেরা ৩টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
+    fb_lines = ["⚡ আজকের সেরা ৩টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
 
     for idx, prod in enumerate(selected_products, start=1):
         price = prod.get('discount_price', '')
@@ -147,7 +146,7 @@ def main():
     tg_caption = "\n".join(tg_lines)
     fb_caption = "\n".join(fb_lines)
 
-    # ৩. টেলিগ্রামে পোস্ট পাঠানো
+    # ৩. টেলিগ্রামে একসাথে কোলাজ ছবি ও ডাইরেক্ট লিংক পোস্ট পাঠানো
     tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
     with open(image_path, "rb") as photo:
         payload = {
@@ -159,24 +158,32 @@ def main():
         response = requests.post(tg_url, data=payload, files=files)
 
     if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
+        print("টেলিগ্রামে সফলভাবে কোলাজ ও লিংক একসাথে পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
 
-        # ৫. Posted_History ট্যাবে রেকর্ড সেভ করা
+        # ৫. Posted_History ট্যাবে বাংলাদেশ সময়সহ (DATE AND TIME) ঠিক পরবর্তী খালি রো-তে সেভ করা
         try:
             history_sheet = ss.worksheet("Posted_History")
-            rows_to_move = queue_sheet.get_values("A2:H7")
+            rows_to_move = queue_sheet.get_values("A2:H4")
             if rows_to_move:
-                history_sheet.append_rows(rows_to_move)
-                print("Posted_History ট্যাবে রেকর্ড সেভ হয়েছে।")
+                bd_tz = timezone(timedelta(hours=6))
+                now_bd = datetime.now(bd_tz).strftime("%Y-%m-%d %H:%M:%S")
+                enriched_rows = [row + [now_bd] for row in rows_to_move]
+                
+                existing_col_a = history_sheet.col_values(1)
+                next_row = len(existing_col_a) + 1
+                end_row = next_row + len(enriched_rows) - 1
+                
+                history_sheet.update(f"A{next_row}:I{end_row}", enriched_rows, value_input_option="USER_ENTERED")
+                print(f"Posted_History ট্যাবে {next_row}-{end_row} রো-তে সময়সহ ({now_bd}) সেভ হয়েছে।")
         except Exception as e:
             print(f"History সেভ করতে সামান্য সমস্যা: {e}")
 
-        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া রো ডিলিট করা
-        queue_sheet.delete_rows(2, 7)
-        print("পোস্টকৃত ৬টি রো Queue থেকে সরানো হয়েছে।")
+        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া ৩টি রো ডিলিট করা
+        queue_sheet.delete_rows(2, 4)
+        print("পোস্টকৃত ৩টি রো Queue থেকে সরানো হয়েছে।")
     else:
         print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
 
