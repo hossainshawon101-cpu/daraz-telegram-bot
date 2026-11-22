@@ -30,7 +30,7 @@ def get_spreadsheet():
     except Exception:
         return client.open("Daraz Deals")
 
-# --- লম্বা লিংক শর্ট করার ফাংশন (শুধু ফেসবুকের জন্য) ---
+# --- লম্বা লিংক শর্ট করার ফাংশন (TinyURL) ---
 def shorten_url(long_url):
     if not long_url:
         return ""
@@ -140,12 +140,14 @@ def main():
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
 
-    # ২. টেলিগ্রাম ও ফেসবুকের জন্য আলাদা ক্লিন ক্যাপশন তৈরি
+    # ২. ক্যাপশন এবং ডাইরেক্ট বাটন তৈরি (কোনো পপ-আপ ছাড়াই ১ ক্লিকে ওপেন হবে)
     tg_lines = ["⚡ <b>আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
     fb_lines = ["⚡ আজকের সেরা ৬টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
     
-    for prod in selected_products:
-        pid = str(prod.get('product_id', '')).strip()
+    buttons = []
+    row_buttons = []
+
+    for idx, prod in enumerate(selected_products, start=1):
         price = prod.get('discount_price', '')
         discount = str(prod.get('discount_percent', '')).strip()
         raw_title = str(prod.get('title', '')).strip()
@@ -154,15 +156,22 @@ def main():
         raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
         short_link = shorten_url(raw_link)
         
-        # টেলিগ্রামে সরাসরি দারাজের রিয়েল অ্যাফিলিয়েট লিংক কাজ করবে
-        display_url = f"https://www.daraz.com.bd/products/i{pid}.html" if pid else "https://www.daraz.com.bd"
-        tg_lines.append(f"✅ <b>{discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 <a href='{raw_link}'>{display_url}</a>")
-        
-        # ফেসবুকে শর্ট লিংক দেখাবে
-        fb_lines.append(f"✅ {discount} OFF {short_title} ({price} টাকা)\n👉 {short_link}")
+        # প্লেইন শর্ট লিংক দিলে টেলিগ্রামে কোনো পপ-আপ ছাড়াই ১ ক্লিকে ওপেন হবে
+        tg_lines.append(f"✅ <b>{idx}. {discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 {short_link}")
+        fb_lines.append(f"✅ {idx}. {discount} OFF {short_title} ({price} টাকা)\n👉 {short_link}")
+
+        # নিচে ডাইরেক্ট অর্ডার বাটন (২টি করে প্রতি সারিতে)
+        row_buttons.append({"text": f"🛒 ডিল #{idx} (৳{price})", "url": raw_link})
+        if len(row_buttons) == 2:
+            buttons.append(row_buttons)
+            row_buttons = []
+
+    if row_buttons:
+        buttons.append(row_buttons)
 
     tg_caption = "\n".join(tg_lines)
     fb_caption = "\n".join(fb_lines)
+    reply_markup = json.dumps({"inline_keyboard": buttons})
 
     # ৩. টেলিগ্রামে পোস্ট পাঠানো
     tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -170,13 +179,14 @@ def main():
         payload = {
             "chat_id": CHAT_ID,
             "caption": tg_caption,
-            "parse_mode": "HTML"
+            "parse_mode": "HTML",
+            "reply_markup": reply_markup
         }
         files = {"photo": photo}
         response = requests.post(tg_url, data=payload, files=files)
 
     if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে কোলাজ পোস্ট হয়েছে!")
+        print("টেলিগ্রামে সফলভাবে কোলাজ ও ডাইরেক্ট বাটনসহ পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
