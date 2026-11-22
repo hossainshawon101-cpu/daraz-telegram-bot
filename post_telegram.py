@@ -31,59 +31,54 @@ def get_spreadsheet():
     except Exception:
         return client.open("Daraz Deals")
 
-# --- ১x২ গ্রিড কোলাজ ইমেজ তৈরি (২টি প্রোডাক্ট পাশাপাশি) ---
-def create_collage(products):
-    card_w, card_h = 450, 520
-    cols, rows = 2, 1
-    collage = Image.new("RGB", (card_w * cols, card_h * rows), (245, 245, 245))
-    draw = ImageDraw.Draw(collage)
+# --- প্রফেশনাল ডিল কার্ড ইমেজ তৈরি (১টি প্রোডাক্টের জন্য) ---
+def create_deal_card(prod):
+    card_w, card_h = 600, 680
+    card = Image.new("RGB", (card_w, card_h), (245, 245, 245))
+    draw = ImageDraw.Draw(card)
 
     try:
-        font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-        font_old = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 19)
-        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 19)
+        font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        font_old = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
     except:
         font_price = ImageFont.load_default()
         font_old = ImageFont.load_default()
         font_badge = ImageFont.load_default()
 
-    for idx, prod in enumerate(products):
-        x_offset = idx * card_w
-        y_offset = 0
+    # সাদা কার্ড ব্যাকগ্রাউন্ড
+    draw.rectangle([10, 10, card_w - 10, card_h - 10], fill=(255, 255, 255), outline=(220, 220, 220), width=3)
 
-        # সাদা কার্ড ব্যাকগ্রাউন্ড
-        draw.rectangle([x_offset + 6, y_offset + 6, x_offset + card_w - 6, y_offset + card_h - 6], fill=(255, 255, 255), outline=(220, 220, 220), width=2)
+    # প্রোডাক্ট ইমেজ ডাউনলোড ও রিসাইজ
+    try:
+        img_url = prod.get('image_url', '').strip()
+        img_res = requests.get(img_url, timeout=15)
+        img = Image.open(BytesIO(img_res.content)).convert("RGB")
+        img = img.resize((560, 520), Image.Resampling.LANCZOS)
+        card.paste(img, (20, 20))
+    except Exception as e:
+        print(f"Image load error: {e}")
 
-        # প্রোডাক্ট ইমেজ ডাউনলোড ও রিসাইজ
-        try:
-            img_url = prod.get('image_url', '').strip()
-            img_res = requests.get(img_url, timeout=15)
-            img = Image.open(BytesIO(img_res.content)).convert("RGB")
-            img = img.resize((426, 400), Image.Resampling.LANCZOS)
-            collage.paste(img, (x_offset + 12, y_offset + 12))
-        except Exception as e:
-            print(f"Image load error: {e}")
+    # ডিসকাউন্ট ব্যাজ
+    discount_pct = str(prod.get('discount_percent', '')).strip()
+    if discount_pct:
+        draw.rectangle([450, 30, 575, 75], fill=(230, 46, 4))
+        draw.text((468, 38), f"-{discount_pct}", fill=(255, 255, 255), font=font_badge)
 
-        # ডিসকাউন্ট ব্যাজ
-        discount_pct = str(prod.get('discount_percent', '')).strip()
-        if discount_pct:
-            draw.rectangle([x_offset + 340, y_offset + 18, x_offset + 434, y_offset + 52], fill=(230, 46, 4))
-            draw.text((x_offset + 354, y_offset + 24), f"-{discount_pct}", fill=(255, 255, 255), font=font_badge)
+    # নিচের অংশে প্রাইস ও রেটিং বসানো
+    disc_price = prod.get('discount_price', '')
+    orig_price = prod.get('original_price', '')
+    rating_raw = str(prod.get('rating', '')).split('|')[0].strip()
 
-        # নিচের অংশে প্রাইস ও রেটিং বসানো
-        disc_price = prod.get('discount_price', '')
-        orig_price = prod.get('original_price', '')
-        rating_raw = str(prod.get('rating', '')).split('|')[0].strip()
+    draw.text((28, 555), f"Tk {disc_price}", fill=(248, 86, 6), font=font_price)
+    draw.text((230, 563), f"Tk {orig_price}", fill=(140, 140, 140), font=font_old)
+    draw.text((28, 610), f"Rating: {rating_raw}", fill=(80, 80, 80), font=font_old)
 
-        draw.text((x_offset + 20, y_offset + 422), f"Tk {disc_price}", fill=(248, 86, 6), font=font_price)
-        draw.text((x_offset + 180, y_offset + 428), f"Tk {orig_price}", fill=(140, 140, 140), font=font_old)
-        draw.text((x_offset + 20, y_offset + 465), f"Rating: {rating_raw}", fill=(80, 80, 80), font=font_old)
-
-    output_path = "collage.jpg"
-    collage.save(output_path, quality=90)
+    output_path = "deal_card.jpg"
+    card.save(output_path, quality=92)
     return output_path
 
-# --- ফেসবুক পেজে কোলাজ পোস্ট করার ফাংশন ---
+# --- ফেসবুক পেজে পোস্ট করার ফাংশন ---
 def post_to_facebook(image_path, fb_caption):
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
         print("FB_PAGE_ID বা FB_ACCESS_TOKEN পাওয়া যায়নি, ফেসবুক পোস্ট স্কিপ করা হলো।")
@@ -100,7 +95,7 @@ def post_to_facebook(image_path, fb_caption):
             files = {"source": photo}
             res = requests.post(fb_url, data=payload, files=files, timeout=25)
             if res.status_code == 200:
-                print("ফেসবুক পেজেও সফলভাবে কোলাজ পোস্ট হয়েছে!")
+                print("ফেসবুক পেজেও সফলভাবে পোস্ট হয়েছে!")
             else:
                 print(f"ফেসবুক পোস্ট এরর: {res.text}")
     except Exception as e:
@@ -117,36 +112,41 @@ def main():
         clean_row = {str(k).strip().lower(): v for k, v in row.items()}
         records.append(clean_row)
 
-    # প্রতি পোস্টে ২টি প্রোডাক্ট নেওয়া হবে যাতে ১০২৪ অক্ষরের সীমার ভেতরে সরাসরি ফুল দারাজ লিংক ধরে
-    if len(records) < 2:
-        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ২টি পূর্ণ হলে পোস্ট করা হবে।")
+    if len(records) < 1:
+        print("Queue শিটে কোনো প্রোডাক্ট নেই।")
         return
 
-    selected_products = records[:2]
-    print("২টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    prod = records[0]
+    print("১টি প্রোডাক্ট নেওয়া হয়েছে, ডিল কার্ড তৈরি হচ্ছে...")
 
-    # ১. কোলাজ ছবি তৈরি
-    image_path = create_collage(selected_products)
+    # ১. ডিল কার্ড ছবি তৈরি
+    image_path = create_deal_card(prod)
 
-    # ২. একসাথে ছবি ও সরাসরি daraz.com.bd লিংকের ক্যাপশন তৈরি
-    tg_lines = ["⚡ <b>আজকের সেরা ২টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
-    fb_lines = ["⚡ আজকের সেরা ২টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
+    # ২. ক্যাপশন তৈরি (কোনো tinyurl, বাটন বা পপ-আপ ছাড়াই সরাসরি daraz.com.bd লিংক)
+    price = prod.get('discount_price', '')
+    orig_price = prod.get('original_price', '')
+    discount = str(prod.get('discount_percent', '')).strip()
+    rating = str(prod.get('rating', '')).strip()
+    title = str(prod.get('title', '')).strip()
+    raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
 
-    for idx, prod in enumerate(selected_products, start=1):
-        price = prod.get('discount_price', '')
-        discount = str(prod.get('discount_percent', '')).strip()
-        raw_title = str(prod.get('title', '')).strip()
-        short_title = raw_title[:40] + "..." if len(raw_title) > 40 else raw_title
-        
-        raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
-        
-        tg_lines.append(f"✅ <b>{idx}. {discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 {raw_link}")
-        fb_lines.append(f"✅ {idx}. {discount} OFF {short_title} ({price} টাকা)\n👉 {raw_link}")
+    tg_caption = (
+        f"🔥 <b>{discount} OFF ফ্ল্যাশ ডিল!</b>\n\n"
+        f"📦 <b>{title}</b>\n\n"
+        f"💰 অফার প্রাইস: <b>{price} টাকা</b> (আগের দাম <s>{orig_price} টাকা</s>)\n"
+        f"⭐ রেটিং: {rating}\n\n"
+        f"🛒 <b>অর্ডার লিংক (সরাসরি দারাজ):</b>\n{raw_link}"
+    )
 
-    tg_caption = "\n".join(tg_lines)
-    fb_caption = "\n".join(fb_lines)
+    fb_caption = (
+        f"🔥 {discount} OFF ফ্ল্যাশ ডিল!\n\n"
+        f"📦 {title}\n\n"
+        f"💰 অফার প্রাইস: {price} টাকা (আগের দাম {orig_price} টাকা)\n"
+        f"⭐ রেটিং: {rating}\n\n"
+        f"🛒 অর্ডার লিংক:\n{raw_link}"
+    )
 
-    # ৩. টেলিগ্রামে একসাথে কোলাজ ছবি ও ডাইরেক্ট লিংক পোস্ট পাঠানো
+    # ৩. টেলিগ্রামে পোস্ট পাঠানো
     tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
     with open(image_path, "rb") as photo:
         payload = {
@@ -158,7 +158,7 @@ def main():
         response = requests.post(tg_url, data=payload, files=files)
 
     if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে কোলাজ ও ডাইরেক্ট দারাজ লিংক একসাথে পোস্ট হয়েছে!")
+        print("টেলিগ্রামে সফলভাবে ডাইরেক্ট দারাজ লিংকসহ পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
@@ -166,7 +166,7 @@ def main():
         # ৫. Posted_History ট্যাবে বাংলাদেশ সময়সহ (DATE AND TIME) ঠিক পরবর্তী খালি রো-তে সেভ করা
         try:
             history_sheet = ss.worksheet("Posted_History")
-            rows_to_move = queue_sheet.get_values("A2:H3")
+            rows_to_move = queue_sheet.get_values("A2:H2")
             if rows_to_move:
                 bd_tz = timezone(timedelta(hours=6))
                 now_bd = datetime.now(bd_tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -174,16 +174,15 @@ def main():
                 
                 existing_col_a = history_sheet.col_values(1)
                 next_row = len(existing_col_a) + 1
-                end_row = next_row + len(enriched_rows) - 1
                 
-                history_sheet.update(f"A{next_row}:I{end_row}", enriched_rows, value_input_option="USER_ENTERED")
-                print(f"Posted_History ট্যাবে {next_row}-{end_row} রো-তে সময়সহ ({now_bd}) সেভ হয়েছে।")
+                history_sheet.update(f"A{next_row}:I{next_row}", enriched_rows, value_input_option="USER_ENTERED")
+                print(f"Posted_History ট্যাবে {next_row} নম্বর রো-তে সময়সহ ({now_bd}) সেভ হয়েছে।")
         except Exception as e:
             print(f"History সেভ করতে সামান্য সমস্যা: {e}")
 
-        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া ২টি রো ডিলিট করা
-        queue_sheet.delete_rows(2, 3)
-        print("পোস্টকৃত ২টি রো Queue থেকে সরানো হয়েছে।")
+        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া রো ডিলিট করা
+        queue_sheet.delete_rows(2)
+        print("পোস্টকৃত রো Queue থেকে সরানো হয়েছে।")
     else:
         print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
 
