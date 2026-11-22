@@ -31,17 +31,17 @@ def get_spreadsheet():
     except Exception:
         return client.open("Daraz Deals")
 
-# --- ১x৩ গ্রিড কোলাজ ইমেজ তৈরি (৩টি প্রোডাক্ট একসাথে) ---
+# --- ১x২ গ্রিড কোলাজ ইমেজ তৈরি (২টি প্রোডাক্ট পাশাপাশি) ---
 def create_collage(products):
-    card_w, card_h = 400, 480
-    cols, rows = 3, 1
+    card_w, card_h = 450, 520
+    cols, rows = 2, 1
     collage = Image.new("RGB", (card_w * cols, card_h * rows), (245, 245, 245))
     draw = ImageDraw.Draw(collage)
 
     try:
-        font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
-        font_old = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+        font_price = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        font_old = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 19)
+        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 19)
     except:
         font_price = ImageFont.load_default()
         font_old = ImageFont.load_default()
@@ -52,32 +52,32 @@ def create_collage(products):
         y_offset = 0
 
         # সাদা কার্ড ব্যাকগ্রাউন্ড
-        draw.rectangle([x_offset + 5, y_offset + 5, x_offset + card_w - 5, y_offset + card_h - 5], fill=(255, 255, 255), outline=(220, 220, 220), width=2)
+        draw.rectangle([x_offset + 6, y_offset + 6, x_offset + card_w - 6, y_offset + card_h - 6], fill=(255, 255, 255), outline=(220, 220, 220), width=2)
 
         # প্রোডাক্ট ইমেজ ডাউনলোড ও রিসাইজ
         try:
             img_url = prod.get('image_url', '').strip()
             img_res = requests.get(img_url, timeout=15)
             img = Image.open(BytesIO(img_res.content)).convert("RGB")
-            img = img.resize((380, 360), Image.Resampling.LANCZOS)
-            collage.paste(img, (x_offset + 10, y_offset + 10))
+            img = img.resize((426, 400), Image.Resampling.LANCZOS)
+            collage.paste(img, (x_offset + 12, y_offset + 12))
         except Exception as e:
             print(f"Image load error: {e}")
 
         # ডিসকাউন্ট ব্যাজ
         discount_pct = str(prod.get('discount_percent', '')).strip()
         if discount_pct:
-            draw.rectangle([x_offset + 295, y_offset + 15, x_offset + 385, y_offset + 48], fill=(230, 46, 4))
-            draw.text((x_offset + 308, y_offset + 21), f"-{discount_pct}", fill=(255, 255, 255), font=font_badge)
+            draw.rectangle([x_offset + 340, y_offset + 18, x_offset + 434, y_offset + 52], fill=(230, 46, 4))
+            draw.text((x_offset + 354, y_offset + 24), f"-{discount_pct}", fill=(255, 255, 255), font=font_badge)
 
         # নিচের অংশে প্রাইস ও রেটিং বসানো
         disc_price = prod.get('discount_price', '')
         orig_price = prod.get('original_price', '')
         rating_raw = str(prod.get('rating', '')).split('|')[0].strip()
 
-        draw.text((x_offset + 18, y_offset + 382), f"Tk {disc_price}", fill=(248, 86, 6), font=font_price)
-        draw.text((x_offset + 165, y_offset + 388), f"Tk {orig_price}", fill=(140, 140, 140), font=font_old)
-        draw.text((x_offset + 18, y_offset + 425), f"Rating: {rating_raw}", fill=(80, 80, 80), font=font_old)
+        draw.text((x_offset + 20, y_offset + 422), f"Tk {disc_price}", fill=(248, 86, 6), font=font_price)
+        draw.text((x_offset + 180, y_offset + 428), f"Tk {orig_price}", fill=(140, 140, 140), font=font_old)
+        draw.text((x_offset + 20, y_offset + 465), f"Rating: {rating_raw}", fill=(80, 80, 80), font=font_old)
 
     output_path = "collage.jpg"
     collage.save(output_path, quality=90)
@@ -117,26 +117,26 @@ def main():
         clean_row = {str(k).strip().lower(): v for k, v in row.items()}
         records.append(clean_row)
 
-    # প্রতি পোস্টে ৩টি প্রোডাক্ট নেওয়া হবে যাতে ছবি ও লিংক একসাথে ১০২৪ অক্ষরের ভেতরে ধরে
-    if len(records) < 3:
-        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ৩টি পূর্ণ হলে পোস্ট করা হবে।")
+    # প্রতি পোস্টে ২টি প্রোডাক্ট নেওয়া হবে যাতে ১০২৪ অক্ষরের সীমার ভেতরে সরাসরি ফুল দারাজ লিংক ধরে
+    if len(records) < 2:
+        print(f"Queue শিটে মাত্র {len(records)}টি প্রোডাক্ট আছে। ২টি পূর্ণ হলে পোস্ট করা হবে।")
         return
 
-    selected_products = records[:3]
-    print("৩টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
+    selected_products = records[:2]
+    print("২টি প্রোডাক্ট নেওয়া হয়েছে, কোলাজ তৈরি হচ্ছে...")
 
     # ১. কোলাজ ছবি তৈরি
     image_path = create_collage(selected_products)
 
-    # ২. একসাথে ছবি ও লিংকের জন্য ক্যাপশন তৈরি (কোনো বাটন ও tinyurl ছাড়াই)
-    tg_lines = ["⚡ <b>আজকের সেরা ৩টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
-    fb_lines = ["⚡ আজকের সেরা ৩টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
+    # ২. একসাথে ছবি ও সরাসরি daraz.com.bd লিংকের ক্যাপশন তৈরি
+    tg_lines = ["⚡ <b>আজকের সেরা ২টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:</b>\n"]
+    fb_lines = ["⚡ আজকের সেরা ২টি ফ্ল্যাশ ডিল! যেটা লাগবে দ্রুত অর্ডার করুন:\n"]
 
     for idx, prod in enumerate(selected_products, start=1):
         price = prod.get('discount_price', '')
         discount = str(prod.get('discount_percent', '')).strip()
         raw_title = str(prod.get('title', '')).strip()
-        short_title = raw_title[:36] + "..." if len(raw_title) > 36 else raw_title
+        short_title = raw_title[:40] + "..." if len(raw_title) > 40 else raw_title
         
         raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
         
@@ -158,7 +158,7 @@ def main():
         response = requests.post(tg_url, data=payload, files=files)
 
     if response.status_code == 200:
-        print("টেলিগ্রামে সফলভাবে কোলাজ ও লিংক একসাথে পোস্ট হয়েছে!")
+        print("টেলিগ্রামে সফলভাবে কোলাজ ও ডাইরেক্ট দারাজ লিংক একসাথে পোস্ট হয়েছে!")
         
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
@@ -166,7 +166,7 @@ def main():
         # ৫. Posted_History ট্যাবে বাংলাদেশ সময়সহ (DATE AND TIME) ঠিক পরবর্তী খালি রো-তে সেভ করা
         try:
             history_sheet = ss.worksheet("Posted_History")
-            rows_to_move = queue_sheet.get_values("A2:H4")
+            rows_to_move = queue_sheet.get_values("A2:H3")
             if rows_to_move:
                 bd_tz = timezone(timedelta(hours=6))
                 now_bd = datetime.now(bd_tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -181,9 +181,9 @@ def main():
         except Exception as e:
             print(f"History সেভ করতে সামান্য সমস্যা: {e}")
 
-        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া ৩টি রো ডিলিট করা
-        queue_sheet.delete_rows(2, 4)
-        print("পোস্টকৃত ৩টি রো Queue থেকে সরানো হয়েছে।")
+        # ৬. Queue থেকে পোস্ট হয়ে যাওয়া ২টি রো ডিলিট করা
+        queue_sheet.delete_rows(2, 3)
+        print("পোস্টকৃত ২টি রো Queue থেকে সরানো হয়েছে।")
     else:
         print(f"টেলিগ্রামে পোস্ট করতে সমস্যা হয়েছে: {response.text}")
 
