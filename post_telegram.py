@@ -4,6 +4,7 @@ import json
 import requests
 import gspread
 from io import BytesIO
+from datetime import datetime, timezone, timedelta
 from PIL import Image, ImageDraw, ImageFont
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -140,7 +141,6 @@ def main():
         
         raw_link = str(prod.get('affiliate_link') or prod.get('link') or prod.get('product_url') or "").strip()
         
-        # প্লেইন daraz.com.bd লিংক দিলে কোনো পপ-আপ ছাড়াই ১ ক্লিকে ওপেন হবে
         tg_lines.append(f"✅ <b>{idx}. {discount} OFF</b> {short_title} <b>({price} টাকা)</b>\n👉 {raw_link}")
         fb_lines.append(f"✅ {idx}. {discount} OFF {short_title} ({price} টাকা)\n👉 {raw_link}")
 
@@ -164,13 +164,24 @@ def main():
         # ৪. ফেসবুক পেজে পোস্ট পাঠানো
         post_to_facebook(image_path, fb_caption)
 
-        # ৫. Posted_History ট্যাবে রেকর্ড সেভ করা
+        # ৫. Posted_History ট্যাবে বাংলাদেশ সময়সহ (DATE AND TIME) ঠিক পরবর্তী খালি রো-তে রেকর্ড সেভ করা
         try:
             history_sheet = ss.worksheet("Posted_History")
             rows_to_move = queue_sheet.get_values("A2:H7")
             if rows_to_move:
-                history_sheet.append_rows(rows_to_move)
-                print("Posted_History ট্যাবে রেকর্ড সেভ হয়েছে।")
+                bd_tz = timezone(timedelta(hours=6))
+                now_bd = datetime.now(bd_tz).strftime("%Y-%m-%d %H:%M:%S")
+                
+                # প্রতিটি রো-এর শেষে I কলামে DATE AND TIME যোগ করা
+                enriched_rows = [row + [now_bd] for row in rows_to_move]
+                
+                # টেবিল ফরম্যাট থাকলেও ঠিক নিচের খালি রো খুঁজে বের করে সেখানে বসানো
+                existing_col_a = history_sheet.col_values(1)
+                next_row = len(existing_col_a) + 1
+                end_row = next_row + len(enriched_rows) - 1
+                
+                history_sheet.update(f"A{next_row}:I{end_row}", enriched_rows, value_input_option="USER_ENTERED")
+                print(f"Posted_History ট্যাবে {next_row} থেকে {end_row} নম্বর রো-তে সময়সহ ({now_bd}) সেভ হয়েছে।")
         except Exception as e:
             print(f"History সেভ করতে সামান্য সমস্যা: {e}")
 
